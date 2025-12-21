@@ -8,7 +8,7 @@ st.set_page_config(page_title="Thu hoạch bài học - T05", page_icon="📝")
 
 # --- PHẦN CẤU HÌNH ĐƯỜNG LINK CỦA THẦY (SỬA Ở ĐÂY) ---
 # Thầy hãy dán đường link trang web của Thầy vào giữa hai dấu ngoặc kép dưới đây
-LINK_APP_CUA_THAY = "https://share.streamlit.io/..." 
+LINK_APP_CUA_THAY = "https://lop-hoc-ai-6xgnjmvjouqtgmblfrernh.streamlit.app/" 
 # Ví dụ: "https://lop-hoc-ai.streamlit.app"
 # -----------------------------------------------------
 
