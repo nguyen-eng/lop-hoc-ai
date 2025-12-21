@@ -56,7 +56,7 @@ with st.expander("🔐 Khu vực Giảng viên (Phân tích dữ liệu)"):
                     # Gửi cho AI xử lý
                     with st.spinner('Đang đọc suy nghĩ của cả lớp...'):
                         data_text = df.to_string()
-                        model = genai.GenerativeModel('gemini-pro')
+                        model = genai.GenerativeModel('gemini-1.5-flash')
                         prompt = f"""
                         Đóng vai trợ lý giáo dục. Phân tích danh sách ý kiến học viên sau:
                         {data_text}
