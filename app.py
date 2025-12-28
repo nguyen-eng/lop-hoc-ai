@@ -7,7 +7,7 @@ import os
 st.set_page_config(page_title="Lớp học Thông minh T05", page_icon="🏫", layout="wide")
 
 # Link để tạo QR (Thầy thay link của thầy vào đây)
-LINK_APP = "https://share.streamlit.io/..." 
+LINK_APP = "https://lop-hoc-ai-6xgnjmvjouqtgmblfrernh.streamlit.app/" 
 
 try:
     api_key = st.secrets["GEMINI_API_KEY"]
@@ -19,7 +19,7 @@ except:
 # --- 2. GIAO DIỆN CHUNG (Header & QR) ---
 col_logo, col_header = st.columns([1, 5])
 with col_logo:
-    if LINK_APP != "https://share.streamlit.io/...":
+    if LINK_APP != "https://lop-hoc-ai-6xgnjmvjouqtgmblfrernh.streamlit.app/":
         st.image(f"https://api.qrserver.com/v1/create-qr-code/?size=150x150&data={LINK_APP}", width=100)
 with col_header:
     st.title("🏫 Hệ thống Tương tác Lớp học T05")
