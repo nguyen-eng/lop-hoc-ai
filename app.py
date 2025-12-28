@@ -5,87 +5,48 @@ import os
 import matplotlib.pyplot as plt
 from wordcloud import WordCloud
 import plotly.express as px
-import plotly.graph_objects as go
+import time
 
-# --- 1. CẤU HÌNH TRANG (Full màn hình & Title) ---
+# --- 1. CẤU HÌNH HỆ THỐNG ---
 st.set_page_config(
-    page_title="Hệ thống Quản lý Đào tạo T05",
+    page_title="Hệ thống Đào tạo Đa lớp T05",
     page_icon="👮‍♂️",
     layout="wide",
     initial_sidebar_state="expanded"
 )
 
-# --- 2. CSS "MAKEUP" CHUYÊN NGHIỆP (STYLE GUIDE CAND) ---
+# --- 2. CSS CHUYÊN NGHIỆP (GIỮ NGUYÊN STYLE CAND) ---
 st.markdown("""
 <style>
-    /* NHÚNG FONT CHỮ HIỆN ĐẠI */
     @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700&display=swap');
-
-    html, body, [class*="css"] {
-        font-family: 'Inter', sans-serif;
-    }
-
-    /* TÙY BIẾN THANH SIDEBAR (MÀU XANH ĐẬM NGÀNH) */
-    [data-testid="stSidebar"] {
-        background-color: #111827; /* Màu đen xanh đậm */
-        color: white;
-    }
-    [data-testid="stSidebar"] p, [data-testid="stSidebar"] span {
-        color: #e5e7eb; /* Chữ xám trắng */
+    html, body, [class*="css"] { font-family: 'Inter', sans-serif; }
+    
+    /* Giao diện Login */
+    .login-container {
+        max-width: 400px;
+        margin: auto;
+        padding: 30px;
+        background: white;
+        border-radius: 10px;
+        box-shadow: 0 4px 15px rgba(0,0,0,0.1);
+        text-align: center;
     }
     
-    /* NỀN TỔNG THỂ */
-    .stApp {
-        background-color: #f3f4f6; /* Xám rất nhạt */
-    }
-
-    /* TIÊU ĐỀ TRANG */
-    h1, h2, h3 {
-        color: #1f2937;
-        font-weight: 700;
-    }
-    
-    /* CARD (KHUNG CHỨA NỘI DUNG) - GIỐNG GRADESCOPE */
-    div[data-testid="stVerticalBlock"] > div[style*="flex-direction: column;"] > div[data-testid="stVerticalBlock"] {
-        background-color: white;
-        border-radius: 8px;
-        padding: 20px;
-        box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 0, 0, 0.06);
-    }
-
-    /* NÚT BẤM (BUTTON) - MÀU XANH CÔNG AN */
+    /* Sidebar & Button */
+    [data-testid="stSidebar"] { background-color: #111827; color: white; }
+    [data-testid="stSidebar"] p { color: #e5e7eb; }
     div.stButton > button {
-        background-color: #047857; /* Xanh lá đậm */
-        color: white;
-        border: none;
-        border-radius: 6px;
-        padding: 0.5rem 1rem;
-        font-weight: 600;
-        width: 100%;
-        transition: all 0.2s;
+        background-color: #047857; color: white; border: none;
+        border-radius: 6px; padding: 0.6rem 1rem; font-weight: 600; width: 100%;
     }
-    div.stButton > button:hover {
-        background-color: #065f46;
-        box-shadow: 0 4px 12px rgba(0,0,0,0.15);
+    div.stButton > button:hover { background-color: #065f46; }
+    
+    /* Nút Reset dữ liệu (Màu đỏ) */
+    .reset-btn > button {
+        background-color: #dc2626 !important;
     }
-
-    /* INPUT FIELD */
-    .stTextInput input, .stTextArea textarea {
-        background-color: #f9fafb;
-        border: 1px solid #d1d5db;
-        border-radius: 6px;
-    }
-
-    /* LOGO BO TRÒN */
-    .profile-img {
-        width: 80px;
-        height: 80px;
-        border-radius: 50%;
-        border: 2px solid #fbbf24; /* Viền vàng */
-        margin-bottom: 10px;
-        display: block;
-        margin-left: auto;
-        margin-right: auto;
+    .reset-btn > button:hover {
+        background-color: #b91c1c !important;
     }
 </style>
 """, unsafe_allow_html=True)
@@ -98,192 +59,252 @@ try:
 except:
     pass
 
-# --- HÀM LOAD DỮ LIỆU ---
-def load_data(filename):
+# --- 3. QUẢN LÝ SESSION (TRẠNG THÁI ĐĂNG NHẬP) ---
+if 'is_logged_in' not in st.session_state:
+    st.session_state['is_logged_in'] = False
+if 'user_role' not in st.session_state:
+    st.session_state['user_role'] = '' # 'student' or 'teacher'
+if 'class_id' not in st.session_state:
+    st.session_state['class_id'] = '' # 'lop1', 'lop2'...
+
+# Danh sách 10 lớp
+LIST_CLASSES = {f"Lớp học {i}": f"lop{i}" for i in range(1, 11)}
+# Mật khẩu tương ứng: LH1, LH2...
+CLASS_PASSWORDS = {f"lop{i}": f"LH{i}" for i in range(1, 11)}
+
+# --- HÀM HỖ TRỢ FILE ---
+def get_file_path(class_id, tab_num):
+    """Tạo tên file riêng cho từng lớp (Ví dụ: data_lop1_tab1.csv)"""
+    return f"data_{class_id}_tab{tab_num}.csv"
+
+def load_data(class_id, tab_num):
+    filename = get_file_path(class_id, tab_num)
     if os.path.exists(filename):
         return pd.read_csv(filename, sep="|", names=["Tên", "Nội dung"])
     return pd.DataFrame(columns=["Tên", "Nội dung"])
 
-# --- SIDEBAR: TRUNG TÂM ĐIỀU KHIỂN ---
-with st.sidebar:
-    # Logo Ngành (Link tượng trưng, Thầy có thể thay link ảnh T05 thật)
-    st.markdown("""
-        <img src="https://upload.wikimedia.org/wikipedia/commons/thumb/a/a1/Cong_an_hieu_Viet_Nam.svg/1200px-Cong_an_hieu_Viet_Nam.svg.png" class="profile-img">
-        <div style="text-align: center; margin-bottom: 20px;">
-            <h3 style="color: #fbbf24; margin:0;">T05 - PPU</h3>
-            <p style="font-size: 12px; opacity: 0.8;">ĐẠI HỌC CẢNH SÁT NHÂN DÂN</p>
-        </div>
-    """, unsafe_allow_html=True)
-    
-    st.markdown("---")
-    
-    menu = st.radio(
-        "ĐIỀU HƯỚNG",
-        ["📊 Tổng quan (Dashboard)", "🗣️ Diễn đàn Quan điểm", "🧩 Bài tập Quy trình", "📝 Tổng kết Thu hoạch"],
-        label_visibility="collapsed"
-    )
-    
-    st.markdown("---")
-    st.info("Hệ thống: **Online** 🟢")
-    
-    # QR Code
-    LINK_APP = "https://share.streamlit.io/..." # THAY LINK CỦA THẦY VÀO ĐÂY
-    if LINK_APP != "https://share.streamlit.io/...":
-        with st.expander("📲 Mã QR Lớp học"):
-            st.image(f"https://api.qrserver.com/v1/create-qr-code/?size=150x150&data={LINK_APP}")
-
-# --- TRANG 1: DASHBOARD (TỔNG QUAN) ---
-if "Tổng quan" in menu:
-    st.title("📊 Trung tâm Chỉ huy Lớp học")
-    st.markdown("Báo cáo tình hình học tập và tương tác thời gian thực.")
-    st.markdown("---")
-    
-    df1 = load_data("data_tab1.csv")
-    df2 = load_data("data_tab2.csv")
-    df3 = load_data("data_tab3.csv")
-    
-    # Hàng 1: Thẻ số liệu (Metrics)
-    col1, col2, col3, col4 = st.columns(4)
-    with col1:
-        st.metric("Tổng sỹ số", "85", delta="Đang online") # Giả lập
-    with col2:
-        st.metric("Ý kiến tham gia", f"{len(df1)}", delta="HĐ 1")
-    with col3:
-        st.metric("Bài tập đã nộp", f"{len(df2)}", delta="HĐ 2")
-    with col4:
-        st.metric("Bài thu hoạch", f"{len(df3)}", delta="HĐ 3")
-        
-    st.markdown("---")
-    
-    # Hàng 2: Biểu đồ
-    c_left, c_right = st.columns([2, 1])
-    
-    with c_left:
-        with st.container(border=True):
-            st.subheader("Tiến độ tham gia các hoạt động")
-            if len(df1) > 0 or len(df2) > 0 or len(df3) > 0:
-                data = pd.DataFrame({
-                    "Hoạt động": ["Quan điểm", "Quy trình", "Thu hoạch"],
-                    "Số lượng": [len(df1), len(df2), len(df3)]
-                })
-                # Biểu đồ Plotly với màu sắc ngành (Xanh rêu, Vàng, Đỏ)
-                fig = px.bar(data, x="Hoạt động", y="Số lượng", text_auto=True,
-                             color="Hoạt động", 
-                             color_discrete_sequence=['#047857', '#d97706', '#b91c1c']) 
-                fig.update_layout(paper_bgcolor="rgba(0,0,0,0)", plot_bgcolor="rgba(0,0,0,0)")
-                st.plotly_chart(fig, use_container_width=True)
-            else:
-                st.info("Chưa có dữ liệu để vẽ biểu đồ.")
-                
-    with c_right:
-        with st.container(border=True):
-            st.subheader("Thông báo nhanh")
-            st.success("✅ Hệ thống AI đang hoạt động tốt.")
-            st.warning("⚠️ Nhắc nhở: Lớp nộp bài HĐ2 trước 10:00.")
-            st.info("ℹ️ Chuyên đề hôm nay: Chuyển đổi số trong CAND.")
-
-# --- TRANG 2: QUAN ĐIỂM (DIỄN ĐÀN) ---
-elif "Diễn đàn" in menu:
-    st.title("🗣️ Diễn đàn thảo luận")
-    st.caption("Chủ đề: Cơ hội và Thách thức của Trí tuệ nhân tạo (AI) đối với An ninh trật tự.")
-    st.markdown("---")
-    
-    col_sv, col_gv = st.columns([1, 1], gap="medium")
-    
-    # Cột Học viên
-    with col_sv:
-        st.subheader("Khu vực Học viên")
-        with st.container(border=True):
-            with st.form("f1"):
-                name = st.text_input("Họ và tên học viên")
-                text = st.text_area("Quan điểm của đồng chí (Ngắn gọn)", height=150)
-                if st.form_submit_button("Gửi ý kiến") and name and text:
-                    with open("data_tab1.csv", "a", encoding="utf-8") as f:
-                        f.write(f"{name}|{text.replace(chr(10), ' ')}\n")
-                    st.toast("Đã ghi nhận ý kiến!", icon="✅")
-
-    # Cột Giảng viên
-    with col_gv:
-        st.subheader("Khu vực Giảng viên")
-        with st.container(border=True):
-            if "auth1" not in st.session_state:
-                pwd = st.text_input("Mật khẩu quản trị:", type="password")
-                if pwd == "T05": st.session_state["auth1"] = True; st.rerun()
+def clear_data(class_id):
+    """Hàm xóa sạch dữ liệu của một lớp"""
+    for i in range(1, 4):
+        file = get_file_path(class_id, i)
+        if os.path.exists(file):
+            os.remove(file)
             
-            if st.session_state.get("auth1"):
-                df = load_data("data_tab1.csv")
-                if not df.empty:
-                    tab_a, tab_b = st.tabs(["Danh sách", "Phân tích chuyên sâu"])
-                    with tab_a:
-                        st.dataframe(df, height=200, use_container_width=True)
-                    with tab_b:
-                        if st.button("✨ Phân tích Tích cực/Tiêu cực"):
-                            with st.spinner("AI đang xử lý..."):
-                                prompt = f"Phân tích quan điểm (Tích cực/Tiêu cực) từ dữ liệu: {df.to_string()}. Trả về Markdown."
-                                st.markdown(model.generate_content(prompt).text)
-                        if st.button("☁️ Vẽ Word Cloud"):
-                            text_wc = " ".join(df["Nội dung"].astype(str))
-                            wc = WordCloud(width=800, height=400, background_color='white').generate(text_wc)
-                            fig, ax = plt.subplots()
-                            ax.imshow(wc, interpolation='bilinear'); ax.axis("off")
-                            st.pyplot(fig)
-
-# --- TRANG 3: QUY TRÌNH (BÀI TẬP) ---
-elif "Quy trình" in menu:
-    st.title("🧩 Bài tập Nghiệp vụ")
-    st.caption("Yêu cầu: Sắp xếp các bước xử lý tình huống theo đúng quy trình.")
-    st.markdown("---")
-    
-    col_left, col_right = st.columns([1, 1], gap="medium")
-    
-    with col_left:
+# ==========================================
+# PHẦN 1: MÀN HÌNH ĐĂNG NHẬP (LOGIN SCREEN)
+# ==========================================
+if not st.session_state['is_logged_in']:
+    col1, col2, col3 = st.columns([1, 2, 1])
+    with col2:
+        st.markdown("<br><br>", unsafe_allow_html=True)
         with st.container(border=True):
-            st.markdown("#### 📝 Phiếu trả lời")
-            steps = ["1. Tiếp nhận tin báo", "2. Báo cáo lãnh đạo", "3. Cử lực lượng xuống hiện trường", "4. Xử lý ban đầu & Bảo vệ hiện trường", "5. Lập biên bản"]
-            with st.form("f2"):
-                name = st.text_input("Họ và tên")
-                ans = st.multiselect("Chọn thứ tự đúng:", steps)
-                if st.form_submit_button("Nộp bài") and name:
-                    with open("data_tab2.csv", "a", encoding="utf-8") as f:
-                        f.write(f"{name}|{' -> '.join(ans)}\n")
-                    st.success("Đã nộp bài thành công.")
-    
-    with col_right:
-        with st.container(border=True):
-            st.markdown("#### 🔐 Kết quả & Đánh giá")
-            if st.checkbox("Hiển thị dữ liệu (Giảng viên)"):
-                 df = load_data("data_tab2.csv")
-                 if not df.empty:
-                     st.dataframe(df.tail(10), use_container_width=True)
-                     if st.button("🔍 AI Phân tích Lỗi sai"):
-                         prompt = f"Đáp án đúng: 1->2->3->4->5. Dữ liệu: {df.to_string()}. Phân tích các lỗi sai phổ biến của học viên."
-                         st.write(model.generate_content(prompt).text)
+            st.markdown("""
+            <div style="text-align: center;">
+                <img src="https://upload.wikimedia.org/wikipedia/commons/thumb/a/a1/Cong_an_hieu_Viet_Nam.svg/1200px-Cong_an_hieu_Viet_Nam.svg.png" width="100">
+                <h2 style="color: #047857; margin-top: 10px;">CỔNG ĐÀO TẠO T05</h2>
+                <p>Vui lòng đăng nhập để vào lớp học</p>
+            </div>
+            """, unsafe_allow_html=True)
+            
+            # Form đăng nhập
+            chon_lop = st.selectbox("Chọn Lớp học:", list(LIST_CLASSES.keys()))
+            mat_khau = st.text_input("Mật khẩu truy cập:", type="password")
+            
+            col_login, col_teacher = st.columns(2)
+            
+            # Nút Đăng nhập Học viên
+            if col_login.button("Đăng nhập Học viên"):
+                ma_lop = LIST_CLASSES[chon_lop] # Lấy mã 'lop1'
+                mk_dung = CLASS_PASSWORDS[ma_lop] # Lấy mk 'LH1'
+                
+                if mat_khau == mk_dung:
+                    st.session_state['is_logged_in'] = True
+                    st.session_state['user_role'] = 'student'
+                    st.session_state['class_id'] = ma_lop
+                    st.rerun()
+                else:
+                    st.error("Mật khẩu sai! (Gợi ý: LH + số lớp)")
+            
+            # Nút Đăng nhập Giảng viên
+            if col_teacher.button("Giảng viên / Admin"):
+                if mat_khau == "T05": # Mật khẩu Giảng viên
+                    st.session_state['is_logged_in'] = True
+                    st.session_state['user_role'] = 'teacher'
+                    st.session_state['class_id'] = 'admin' # Admin xem được tất cả
+                    st.rerun()
+                else:
+                    st.error("Sai mật khẩu Giảng viên.")
 
-# --- TRANG 4: TỔNG KẾT ---
-elif "Tổng kết" in menu:
-    st.title("📝 Tổng kết & Thu hoạch")
-    st.markdown("---")
-    
-    with st.container(border=True):
-        col1, col2 = st.columns([2, 1])
-        with col1:
-            st.markdown("#### Bài học tâm đắc nhất")
-            with st.form("f3"):
-                name = st.text_input("Họ tên")
-                val = st.text_area("Nội dung thu hoạch", height=100)
-                if st.form_submit_button("Gửi Thu hoạch") and name:
-                    with open("data_tab3.csv", "a", encoding="utf-8") as f:
-                        f.write(f"{name}|{val.replace(chr(10), ' ')}\n")
-                    st.success("Đã ghi nhận.")
-        with col2:
-            st.info("💡 **Lưu ý:** Nêu ngắn gọn 3 điểm cốt lõi đồng chí rút ra được sau bài học hôm nay.")
+# ==========================================
+# PHẦN 2: GIAO DIỆN CHÍNH (SAU KHI LOGIN)
+# ==========================================
+else:
+    # --- SIDEBAR CHUNG ---
+    with st.sidebar:
+        st.markdown("""
+            <div style="text-align: center; margin-bottom: 20px;">
+                <img src="https://upload.wikimedia.org/wikipedia/commons/thumb/a/a1/Cong_an_hieu_Viet_Nam.svg/1200px-Cong_an_hieu_Viet_Nam.svg.png" width="60">
+                <h3 style="color: #fbbf24; margin:0;">T05 LMS</h3>
+            </div>
+        """, unsafe_allow_html=True)
+        
+        # Hiển thị thông tin người dùng
+        if st.session_state['user_role'] == 'student':
+            # Lấy tên lớp đẹp để hiển thị (VD: lop1 -> Lớp học 1)
+            ten_lop_hien_thi = [k for k, v in LIST_CLASSES.items() if v == st.session_state['class_id']][0]
+            st.info(f"👤 Học viên: **{ten_lop_hien_thi}**")
+        else:
+            st.error("⭐️ **Quyền Giảng viên**")
+        
+        st.divider()
+        
+        # Menu điều hướng
+        menu_options = ["🏠 Dashboard", "1️⃣ Quan điểm", "2️⃣ Quy trình", "3️⃣ Thu hoạch"]
+        if st.session_state['user_role'] == 'teacher':
+             menu_options.append("⚙️ Quản trị & Reset") # Menu riêng cho GV
+             
+        menu = st.radio("ĐIỀU HƯỚNG:", menu_options, label_visibility="collapsed")
+        
+        st.divider()
+        if st.button("Đăng xuất"):
+            st.session_state['is_logged_in'] = False
+            st.rerun()
 
-    st.markdown("---")
-    with st.expander("🔐 Giảng viên: Tổng hợp kiến thức toàn lớp"):
-        if st.text_input("Mật khẩu:", type="password", key="p3") == "T05":
-             topic = st.text_input("Chủ đề bài giảng:")
-             if st.button("🚀 Tổng hợp Kiến thức") and topic:
-                 df = load_data("data_tab3.csv")
-                 if not df.empty:
-                     prompt = f"Chủ đề: {topic}. Dữ liệu: {df.to_string()}. Tóm tắt 3 điểm chính cả lớp đã học được."
-                     st.markdown(model.generate_content(prompt).text)
+    # XÁC ĐỊNH CLASS ID ĐỂ LÀM VIỆC
+    # Nếu là SV: dùng class_id của SV. Nếu là GV: Mặc định chọn Lớp 1 hoặc cho chọn.
+    active_class = st.session_state['class_id']
+    
+    if st.session_state['user_role'] == 'teacher' and menu != "⚙️ Quản trị & Reset":
+        # Giảng viên có quyền chọn lớp để xem dữ liệu ở các Tab hoạt động
+        st.markdown("### 👁️ Chế độ Xem của Giảng viên")
+        chon_lop_gv = st.selectbox("Thầy muốn xem dữ liệu lớp nào?", list(LIST_CLASSES.keys()))
+        active_class = LIST_CLASSES[chon_lop_gv]
+        st.divider()
+
+    # --- NỘI DUNG TỪNG TRANG ---
+    
+    # 1. DASHBOARD
+    if "Dashboard" in menu:
+        st.title(f"📊 Dashboard - {active_class.upper()}")
+        df1 = load_data(active_class, 1)
+        df2 = load_data(active_class, 2)
+        df3 = load_data(active_class, 3)
+        
+        col1, col2, col3 = st.columns(3)
+        col1.metric("Ý kiến", len(df1))
+        col2.metric("Bài tập", len(df2))
+        col3.metric("Thu hoạch", len(df3))
+        
+        if len(df1)>0 or len(df2)>0 or len(df3)>0:
+            data = pd.DataFrame({"HĐ": ["HĐ1", "HĐ2", "HĐ3"], "SL": [len(df1), len(df2), len(df3)]})
+            fig = px.bar(data, x="HĐ", y="SL", color="HĐ", color_discrete_sequence=['#047857', '#d97706', '#b91c1c'])
+            st.plotly_chart(fig, use_container_width=True)
+        else:
+            st.info("Lớp này chưa có dữ liệu nào.")
+
+    # 2. QUAN ĐIỂM
+    elif "1️⃣" in menu:
+        st.title("🗣️ Hoạt động 1: Quan điểm")
+        col_sv, col_gv = st.columns(2)
+        
+        with col_sv:
+            if st.session_state['user_role'] == 'student':
+                with st.form("f1"):
+                    name = st.text_input("Họ tên")
+                    txt = st.text_area("Ý kiến của bạn")
+                    if st.form_submit_button("Gửi") and name:
+                        with open(get_file_path(active_class, 1), "a", encoding="utf-8") as f:
+                            f.write(f"{name}|{txt.replace(chr(10), ' ')}\n")
+                        st.success("Đã gửi!")
+            else:
+                st.info("Giảng viên chỉ xem, không nhập liệu.")
+
+        with col_gv:
+            st.subheader("Phân tích")
+            df = load_data(active_class, 1)
+            if not df.empty:
+                st.dataframe(df, height=200)
+                if st.session_state['user_role'] == 'teacher':
+                    if st.button("AI Phân tích"):
+                        prompt = f"Phân tích ý kiến lớp {active_class}: {df.to_string()}"
+                        st.write(model.generate_content(prompt).text)
+            else:
+                st.warning("Chưa có dữ liệu.")
+
+    # 3. QUY TRÌNH
+    elif "2️⃣" in menu:
+        st.title("🧩 Hoạt động 2: Quy trình")
+        steps = ["1. Tiếp nhận", "2. Báo cáo", "3. Xuống hiện trường", "4. Xử lý", "5. Lập biên bản"]
+        
+        col_sv, col_gv = st.columns(2)
+        with col_sv:
+            if st.session_state['user_role'] == 'student':
+                with st.form("f2"):
+                    name = st.text_input("Họ tên")
+                    ans = st.multiselect("Thứ tự:", steps)
+                    if st.form_submit_button("Nộp") and name:
+                        with open(get_file_path(active_class, 2), "a", encoding="utf-8") as f:
+                            f.write(f"{name}|{'->'.join(ans)}\n")
+                        st.success("Đã nộp!")
+        
+        with col_gv:
+            st.subheader("Kết quả")
+            df = load_data(active_class, 2)
+            if not df.empty:
+                st.dataframe(df)
+                if st.session_state['user_role'] == 'teacher' and st.button("AI Chấm bài"):
+                     st.write(model.generate_content(f"Chấm bài quy trình: {df.to_string()}").text)
+
+    # 4. THU HOẠCH
+    elif "3️⃣" in menu:
+        st.title("📝 Hoạt động 3: Thu hoạch")
+        col_sv, col_gv = st.columns(2)
+        with col_sv:
+             if st.session_state['user_role'] == 'student':
+                with st.form("f3"):
+                    name = st.text_input("Họ tên")
+                    txt = st.text_area("Bài học tâm đắc")
+                    if st.form_submit_button("Gửi") and name:
+                        with open(get_file_path(active_class, 3), "a", encoding="utf-8") as f:
+                             f.write(f"{name}|{txt.replace(chr(10), ' ')}\n")
+                        st.success("Ghi nhận!")
+        with col_gv:
+             df = load_data(active_class, 3)
+             if not df.empty:
+                 st.dataframe(df)
+                 if st.session_state['user_role'] == 'teacher':
+                     topic = st.text_input("Chủ đề:")
+                     if st.button("Tổng hợp") and topic:
+                         st.write(model.generate_content(f"Chủ đề {topic}. Tóm tắt: {df.to_string()}").text)
+
+    # 5. TRANG QUẢN TRỊ (CHỈ GIẢNG VIÊN MỚI THẤY)
+    elif menu == "⚙️ Quản trị & Reset":
+        st.title("⚙️ Quản trị Hệ thống Đa lớp")
+        st.markdown("---")
+        
+        st.warning("⚠️ Vùng nguy hiểm: Xóa dữ liệu sẽ không thể khôi phục.")
+        
+        col_chon, col_hanh_dong = st.columns([1, 2])
+        
+        with col_chon:
+            lop_can_xoa = st.selectbox("Chọn lớp cần Reset dữ liệu:", list(LIST_CLASSES.keys()))
+            ma_lop_xoa = LIST_CLASSES[lop_can_xoa]
+        
+        with col_hanh_dong:
+            st.markdown(f"**Trạng thái lớp {lop_can_xoa}:**")
+            # Kiểm tra xem có file dữ liệu không
+            files_exist = any([os.path.exists(get_file_path(ma_lop_xoa, i)) for i in range(1,4)])
+            
+            if files_exist:
+                st.info(f"Đang chứa dữ liệu.")
+                # Sử dụng container để css nút màu đỏ
+                with st.container():
+                    st.markdown('<div class="reset-btn">', unsafe_allow_html=True)
+                    if st.button(f"🗑 XÓA SẠCH DỮ LIỆU {lop_can_xoa.upper()}"):
+                        clear_data(ma_lop_xoa)
+                        st.toast(f"Đã xóa toàn bộ dữ liệu của {lop_can_xoa}!", icon="🗑")
+                        time.sleep(1)
+                        st.rerun()
+                    st.markdown('</div>', unsafe_allow_html=True)
+            else:
+                st.success("Dữ liệu trống/sạch sẽ.")
