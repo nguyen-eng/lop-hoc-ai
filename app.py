@@ -2,52 +2,24 @@ import streamlit as st
 import google.generativeai as genai
 import pandas as pd
 import os
-import matplotlib.pyplot as plt
-from wordcloud import WordCloud
 import plotly.express as px
 import time
 
 # --- 1. CẤU HÌNH HỆ THỐNG ---
-st.set_page_config(
-    page_title="Hệ thống Đào tạo Đa lớp T05",
-    page_icon="👮‍♂️",
-    layout="wide",
-    initial_sidebar_state="expanded"
-)
+st.set_page_config(page_title="Hệ thống Đa lớp T05", page_icon="👮‍♂️", layout="wide")
 
-# --- 2. CSS CHUYÊN NGHIỆP (GIỮ NGUYÊN STYLE CAND) ---
+# --- 2. CSS STYLE (GIỮ NGUYÊN) ---
 st.markdown("""
 <style>
     @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700&display=swap');
     html, body, [class*="css"] { font-family: 'Inter', sans-serif; }
-    
-    /* Giao diện Login */
-    .login-container {
-        max-width: 400px;
-        margin: auto;
-        padding: 30px;
-        background: white;
-        border-radius: 10px;
-        box-shadow: 0 4px 15px rgba(0,0,0,0.1);
-        text-align: center;
-    }
-    
-    /* Sidebar & Button */
     [data-testid="stSidebar"] { background-color: #111827; color: white; }
-    [data-testid="stSidebar"] p { color: #e5e7eb; }
+    [data-testid="stSidebar"] p, [data-testid="stSidebar"] label { color: #e5e7eb; }
     div.stButton > button {
         background-color: #047857; color: white; border: none;
         border-radius: 6px; padding: 0.6rem 1rem; font-weight: 600; width: 100%;
     }
     div.stButton > button:hover { background-color: #065f46; }
-    
-    /* Nút Reset dữ liệu (Màu đỏ) */
-    .reset-btn > button {
-        background-color: #dc2626 !important;
-    }
-    .reset-btn > button:hover {
-        background-color: #b91c1c !important;
-    }
 </style>
 """, unsafe_allow_html=True)
 
@@ -59,22 +31,20 @@ try:
 except:
     pass
 
-# --- 3. QUẢN LÝ SESSION (TRẠNG THÁI ĐĂNG NHẬP) ---
+# --- 3. QUẢN LÝ TRẠNG THÁI (SESSION) ---
 if 'is_logged_in' not in st.session_state:
     st.session_state['is_logged_in'] = False
 if 'user_role' not in st.session_state:
-    st.session_state['user_role'] = '' # 'student' or 'teacher'
+    st.session_state['user_role'] = ''
 if 'class_id' not in st.session_state:
-    st.session_state['class_id'] = '' # 'lop1', 'lop2'...
+    st.session_state['class_id'] = ''
 
-# Danh sách 10 lớp
+# DANH SÁCH 10 LỚP
 LIST_CLASSES = {f"Lớp học {i}": f"lop{i}" for i in range(1, 11)}
-# Mật khẩu tương ứng: LH1, LH2...
 CLASS_PASSWORDS = {f"lop{i}": f"LH{i}" for i in range(1, 11)}
 
-# --- HÀM HỖ TRỢ FILE ---
+# HÀM HỖ TRỢ
 def get_file_path(class_id, tab_num):
-    """Tạo tên file riêng cho từng lớp (Ví dụ: data_lop1_tab1.csv)"""
     return f"data_{class_id}_tab{tab_num}.csv"
 
 def load_data(class_id, tab_num):
@@ -84,227 +54,143 @@ def load_data(class_id, tab_num):
     return pd.DataFrame(columns=["Tên", "Nội dung"])
 
 def clear_data(class_id):
-    """Hàm xóa sạch dữ liệu của một lớp"""
     for i in range(1, 4):
         file = get_file_path(class_id, i)
-        if os.path.exists(file):
-            os.remove(file)
-            
+        if os.path.exists(file): os.remove(file)
+
 # ==========================================
-# PHẦN 1: MÀN HÌNH ĐĂNG NHẬP (LOGIN SCREEN)
+# MÀN HÌNH ĐĂNG NHẬP (QUAN TRỌNG)
 # ==========================================
 if not st.session_state['is_logged_in']:
     col1, col2, col3 = st.columns([1, 2, 1])
     with col2:
         st.markdown("<br><br>", unsafe_allow_html=True)
         with st.container(border=True):
-            st.markdown("""
-            <div style="text-align: center;">
-                <img src="https://upload.wikimedia.org/wikipedia/commons/thumb/a/a1/Cong_an_hieu_Viet_Nam.svg/1200px-Cong_an_hieu_Viet_Nam.svg.png" width="100">
-                <h2 style="color: #047857; margin-top: 10px;">CỔNG ĐÀO TẠO T05</h2>
-                <p>Vui lòng đăng nhập để vào lớp học</p>
-            </div>
-            """, unsafe_allow_html=True)
+            st.markdown("<h2 style='text-align: center; color: #047857;'>CỔNG ĐÀO TẠO T05</h2>", unsafe_allow_html=True)
+            st.info("👋 Chào mừng! Vui lòng chọn lớp để đăng nhập.")
             
-            # Form đăng nhập
-            chon_lop = st.selectbox("Chọn Lớp học:", list(LIST_CLASSES.keys()))
-            mat_khau = st.text_input("Mật khẩu truy cập:", type="password")
+            # --- DANH MỤC 10 LỚP Ở ĐÂY ---
+            chon_lop = st.selectbox("📌 Chọn Lớp học:", list(LIST_CLASSES.keys()))
+            mat_khau = st.text_input("🔑 Mật khẩu:", type="password")
             
-            col_login, col_teacher = st.columns(2)
-            
-            # Nút Đăng nhập Học viên
-            if col_login.button("Đăng nhập Học viên"):
-                ma_lop = LIST_CLASSES[chon_lop] # Lấy mã 'lop1'
-                mk_dung = CLASS_PASSWORDS[ma_lop] # Lấy mk 'LH1'
-                
+            c1, c2 = st.columns(2)
+            if c1.button("Đăng nhập Học viên"):
+                ma_lop = LIST_CLASSES[chon_lop]
+                mk_dung = CLASS_PASSWORDS[ma_lop]
                 if mat_khau == mk_dung:
                     st.session_state['is_logged_in'] = True
                     st.session_state['user_role'] = 'student'
                     st.session_state['class_id'] = ma_lop
                     st.rerun()
                 else:
-                    st.error("Mật khẩu sai! (Gợi ý: LH + số lớp)")
+                    st.error(f"Sai mật khẩu! Mật khẩu lớp này là {mk_dung}")
             
-            # Nút Đăng nhập Giảng viên
-            if col_teacher.button("Giảng viên / Admin"):
-                if mat_khau == "T05": # Mật khẩu Giảng viên
+            if c2.button("Giảng viên / Admin"):
+                if mat_khau == "T05":
                     st.session_state['is_logged_in'] = True
                     st.session_state['user_role'] = 'teacher'
-                    st.session_state['class_id'] = 'admin' # Admin xem được tất cả
+                    st.session_state['class_id'] = 'admin'
                     st.rerun()
                 else:
-                    st.error("Sai mật khẩu Giảng viên.")
+                    st.error("Sai mật khẩu Giảng viên (T05).")
 
 # ==========================================
-# PHẦN 2: GIAO DIỆN CHÍNH (SAU KHI LOGIN)
+# GIAO DIỆN CHÍNH (SAU KHI ĐĂNG NHẬP)
 # ==========================================
 else:
-    # --- SIDEBAR CHUNG ---
+    # --- SIDEBAR ---
     with st.sidebar:
-        st.markdown("""
-            <div style="text-align: center; margin-bottom: 20px;">
-                <img src="https://upload.wikimedia.org/wikipedia/commons/thumb/a/a1/Cong_an_hieu_Viet_Nam.svg/1200px-Cong_an_hieu_Viet_Nam.svg.png" width="60">
-                <h3 style="color: #fbbf24; margin:0;">T05 LMS</h3>
-            </div>
-        """, unsafe_allow_html=True)
-        
-        # Hiển thị thông tin người dùng
-        if st.session_state['user_role'] == 'student':
-            # Lấy tên lớp đẹp để hiển thị (VD: lop1 -> Lớp học 1)
-            ten_lop_hien_thi = [k for k, v in LIST_CLASSES.items() if v == st.session_state['class_id']][0]
-            st.info(f"👤 Học viên: **{ten_lop_hien_thi}**")
-        else:
-            st.error("⭐️ **Quyền Giảng viên**")
-        
+        st.image("https://upload.wikimedia.org/wikipedia/commons/thumb/a/a1/Cong_an_hieu_Viet_Nam.svg/1200px-Cong_an_hieu_Viet_Nam.svg.png", width=50)
+        st.markdown("### T05 LMS")
         st.divider()
         
-        # Menu điều hướng
-        menu_options = ["🏠 Dashboard", "1️⃣ Quan điểm", "2️⃣ Quy trình", "3️⃣ Thu hoạch"]
+        # XỬ LÝ HIỂN THỊ LỚP
+        active_class = st.session_state['class_id']
+        
         if st.session_state['user_role'] == 'teacher':
-             menu_options.append("⚙️ Quản trị & Reset") # Menu riêng cho GV
-             
-        menu = st.radio("ĐIỀU HƯỚNG:", menu_options, label_visibility="collapsed")
+            st.success("⭐️ Chế độ Giảng viên")
+            st.markdown("---")
+            # --- MENU CHỌN LỚP CHO GIẢNG VIÊN (NẰM Ở SIDEBAR) ---
+            st.markdown("👇 **CHỌN LỚP ĐỂ QUẢN LÝ:**")
+            chon_lop_gv = st.selectbox("", list(LIST_CLASSES.keys()), index=0)
+            active_class = LIST_CLASSES[chon_lop_gv] # Cập nhật lớp đang xem
+            st.markdown("---")
+        else:
+            # Học viên thì chỉ hiện tên lớp mình
+            ten_lop = [k for k, v in LIST_CLASSES.items() if v == active_class][0]
+            st.info(f"👤 Học viên: {ten_lop}")
+
+        menu = st.radio("ĐIỀU HƯỚNG:", ["🏠 Dashboard", "1️⃣ Quan điểm", "2️⃣ Quy trình", "3️⃣ Thu hoạch", "⚙️ Reset Dữ liệu"])
         
-        st.divider()
-        if st.button("Đăng xuất"):
-            st.session_state['is_logged_in'] = False
+        st.markdown("---")
+        # Nút đăng xuất để quay lại màn hình chọn lớp
+        if st.button("🚪 Đăng xuất"):
+            st.session_state.clear() # Xóa sạch trạng thái cũ
             st.rerun()
 
-    # XÁC ĐỊNH CLASS ID ĐỂ LÀM VIỆC
-    # Nếu là SV: dùng class_id của SV. Nếu là GV: Mặc định chọn Lớp 1 hoặc cho chọn.
-    active_class = st.session_state['class_id']
+    # --- NỘI DUNG CHÍNH ---
+    # Tiêu đề thay đổi theo lớp đang chọn
+    ten_lop_hien_tai = [k for k, v in LIST_CLASSES.items() if v == active_class][0]
     
-    if st.session_state['user_role'] == 'teacher' and menu != "⚙️ Quản trị & Reset":
-        # Giảng viên có quyền chọn lớp để xem dữ liệu ở các Tab hoạt động
-        st.markdown("### 👁️ Chế độ Xem của Giảng viên")
-        chon_lop_gv = st.selectbox("Thầy muốn xem dữ liệu lớp nào?", list(LIST_CLASSES.keys()))
-        active_class = LIST_CLASSES[chon_lop_gv]
-        st.divider()
-
-    # --- NỘI DUNG TỪNG TRANG ---
-    
-    # 1. DASHBOARD
-    if "Dashboard" in menu:
-        st.title(f"📊 Dashboard - {active_class.upper()}")
-        df1 = load_data(active_class, 1)
-        df2 = load_data(active_class, 2)
-        df3 = load_data(active_class, 3)
-        
-        col1, col2, col3 = st.columns(3)
-        col1.metric("Ý kiến", len(df1))
-        col2.metric("Bài tập", len(df2))
-        col3.metric("Thu hoạch", len(df3))
-        
-        if len(df1)>0 or len(df2)>0 or len(df3)>0:
+    if menu == "🏠 Dashboard":
+        st.title(f"📊 {ten_lop_hien_tai}")
+        df1 = load_data(active_class, 1); df2 = load_data(active_class, 2); df3 = load_data(active_class, 3)
+        c1, c2, c3 = st.columns(3)
+        c1.metric("Ý kiến", len(df1)); c2.metric("Bài tập", len(df2)); c3.metric("Thu hoạch", len(df3))
+        if len(df1)+len(df2)+len(df3) > 0:
             data = pd.DataFrame({"HĐ": ["HĐ1", "HĐ2", "HĐ3"], "SL": [len(df1), len(df2), len(df3)]})
-            fig = px.bar(data, x="HĐ", y="SL", color="HĐ", color_discrete_sequence=['#047857', '#d97706', '#b91c1c'])
-            st.plotly_chart(fig, use_container_width=True)
+            st.plotly_chart(px.bar(data, x="HĐ", y="SL", color="HĐ"), use_container_width=True)
         else:
-            st.info("Lớp này chưa có dữ liệu nào.")
+            st.info(f"Lớp {ten_lop_hien_tai} chưa có dữ liệu nào.")
 
-    # 2. QUAN ĐIỂM
-    elif "1️⃣" in menu:
-        st.title("🗣️ Hoạt động 1: Quan điểm")
-        col_sv, col_gv = st.columns(2)
-        
-        with col_sv:
+    elif menu == "1️⃣ Quan điểm":
+        st.header(f"🗣️ Thảo luận: {ten_lop_hien_tai}")
+        c1, c2 = st.columns(2)
+        with c1:
             if st.session_state['user_role'] == 'student':
                 with st.form("f1"):
-                    name = st.text_input("Họ tên")
-                    txt = st.text_area("Ý kiến của bạn")
-                    if st.form_submit_button("Gửi") and name:
-                        with open(get_file_path(active_class, 1), "a", encoding="utf-8") as f:
-                            f.write(f"{name}|{txt.replace(chr(10), ' ')}\n")
-                        st.success("Đã gửi!")
-            else:
-                st.info("Giảng viên chỉ xem, không nhập liệu.")
-
-        with col_gv:
-            st.subheader("Phân tích")
+                    if st.form_submit_button("Gửi ý kiến") and (name := st.text_input("Tên")) and (txt := st.text_area("Nội dung")):
+                        with open(get_file_path(active_class, 1), "a", encoding="utf-8") as f: f.write(f"{name}|{txt.replace(chr(10), ' ')}\n"); st.success("Xong!")
+            else: st.info("Giảng viên chỉ xem.")
+        with c2:
             df = load_data(active_class, 1)
             if not df.empty:
                 st.dataframe(df, height=200)
-                if st.session_state['user_role'] == 'teacher':
-                    if st.button("AI Phân tích"):
-                        prompt = f"Phân tích ý kiến lớp {active_class}: {df.to_string()}"
-                        st.write(model.generate_content(prompt).text)
-            else:
-                st.warning("Chưa có dữ liệu.")
+                if st.session_state['user_role'] == 'teacher' and st.button("AI Phân tích"):
+                    st.markdown(model.generate_content(f"Phân tích: {df.to_string()}").text)
 
-    # 3. QUY TRÌNH
-    elif "2️⃣" in menu:
-        st.title("🧩 Hoạt động 2: Quy trình")
-        steps = ["1. Tiếp nhận", "2. Báo cáo", "3. Xuống hiện trường", "4. Xử lý", "5. Lập biên bản"]
-        
-        col_sv, col_gv = st.columns(2)
-        with col_sv:
+    elif menu == "2️⃣ Quy trình":
+        st.header(f"🧩 Bài tập: {ten_lop_hien_tai}")
+        c1, c2 = st.columns(2)
+        with c1:
             if st.session_state['user_role'] == 'student':
                 with st.form("f2"):
-                    name = st.text_input("Họ tên")
-                    ans = st.multiselect("Thứ tự:", steps)
-                    if st.form_submit_button("Nộp") and name:
-                        with open(get_file_path(active_class, 2), "a", encoding="utf-8") as f:
-                            f.write(f"{name}|{'->'.join(ans)}\n")
-                        st.success("Đã nộp!")
-        
-        with col_gv:
-            st.subheader("Kết quả")
+                    if st.form_submit_button("Nộp bài") and (name := st.text_input("Tên")) and (ans := st.multiselect("Thứ tự", ["B1", "B2", "B3", "B4", "B5"])):
+                        with open(get_file_path(active_class, 2), "a", encoding="utf-8") as f: f.write(f"{name}|{'->'.join(ans)}\n"); st.success("Xong!")
+        with c2:
             df = load_data(active_class, 2)
-            if not df.empty:
-                st.dataframe(df)
-                if st.session_state['user_role'] == 'teacher' and st.button("AI Chấm bài"):
-                     st.write(model.generate_content(f"Chấm bài quy trình: {df.to_string()}").text)
+            if not df.empty: st.dataframe(df)
 
-    # 4. THU HOẠCH
-    elif "3️⃣" in menu:
-        st.title("📝 Hoạt động 3: Thu hoạch")
-        col_sv, col_gv = st.columns(2)
-        with col_sv:
-             if st.session_state['user_role'] == 'student':
+    elif menu == "3️⃣ Thu hoạch":
+        st.header(f"📝 Thu hoạch: {ten_lop_hien_tai}")
+        c1, c2 = st.columns(2)
+        with c1:
+            if st.session_state['user_role'] == 'student':
                 with st.form("f3"):
-                    name = st.text_input("Họ tên")
-                    txt = st.text_area("Bài học tâm đắc")
-                    if st.form_submit_button("Gửi") and name:
-                        with open(get_file_path(active_class, 3), "a", encoding="utf-8") as f:
-                             f.write(f"{name}|{txt.replace(chr(10), ' ')}\n")
-                        st.success("Ghi nhận!")
-        with col_gv:
-             df = load_data(active_class, 3)
-             if not df.empty:
-                 st.dataframe(df)
-                 if st.session_state['user_role'] == 'teacher':
-                     topic = st.text_input("Chủ đề:")
-                     if st.button("Tổng hợp") and topic:
-                         st.write(model.generate_content(f"Chủ đề {topic}. Tóm tắt: {df.to_string()}").text)
+                    if st.form_submit_button("Nộp") and (name := st.text_input("Tên")) and (txt := st.text_area("Bài học")):
+                        with open(get_file_path(active_class, 3), "a", encoding="utf-8") as f: f.write(f"{name}|{txt.replace(chr(10), ' ')}\n"); st.success("Xong!")
+        with c2:
+            df = load_data(active_class, 3)
+            if not df.empty and st.session_state['user_role'] == 'teacher':
+                if st.button("Tổng hợp") and (tp := st.text_input("Chủ đề")):
+                    st.markdown(model.generate_content(f"Chủ đề {tp}. Dữ liệu {df.to_string()}. Tóm tắt 3 ý.").text)
 
-    # 5. TRANG QUẢN TRỊ (CHỈ GIẢNG VIÊN MỚI THẤY)
-    elif menu == "⚙️ Quản trị & Reset":
-        st.title("⚙️ Quản trị Hệ thống Đa lớp")
-        st.markdown("---")
-        
-        st.warning("⚠️ Vùng nguy hiểm: Xóa dữ liệu sẽ không thể khôi phục.")
-        
-        col_chon, col_hanh_dong = st.columns([1, 2])
-        
-        with col_chon:
-            lop_can_xoa = st.selectbox("Chọn lớp cần Reset dữ liệu:", list(LIST_CLASSES.keys()))
-            ma_lop_xoa = LIST_CLASSES[lop_can_xoa]
-        
-        with col_hanh_dong:
-            st.markdown(f"**Trạng thái lớp {lop_can_xoa}:**")
-            # Kiểm tra xem có file dữ liệu không
-            files_exist = any([os.path.exists(get_file_path(ma_lop_xoa, i)) for i in range(1,4)])
-            
-            if files_exist:
-                st.info(f"Đang chứa dữ liệu.")
-                # Sử dụng container để css nút màu đỏ
-                with st.container():
-                    st.markdown('<div class="reset-btn">', unsafe_allow_html=True)
-                    if st.button(f"🗑 XÓA SẠCH DỮ LIỆU {lop_can_xoa.upper()}"):
-                        clear_data(ma_lop_xoa)
-                        st.toast(f"Đã xóa toàn bộ dữ liệu của {lop_can_xoa}!", icon="🗑")
-                        time.sleep(1)
-                        st.rerun()
-                    st.markdown('</div>', unsafe_allow_html=True)
-            else:
-                st.success("Dữ liệu trống/sạch sẽ.")
+    elif menu == "⚙️ Reset Dữ liệu":
+        if st.session_state['user_role'] == 'teacher':
+            st.warning(f"⚠️ Thầy đang chọn xóa dữ liệu của: **{ten_lop_hien_tai}**")
+            if st.button(f"XÓA SẠCH {ten_lop_hien_tai}"):
+                clear_data(active_class)
+                st.toast("Đã xóa xong!", icon="🗑")
+                time.sleep(1); st.rerun()
+        else:
+            st.error("Chỉ Giảng viên mới được vào đây!")
