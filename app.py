@@ -19,7 +19,7 @@ st.set_page_config(
 # --- 🖼️ KHU VỰC THAY LOGO NHÀ TRƯỜNG ---
 # Thầy dán link ảnh logo của Thầy vào giữa hai dấu ngoặc kép dưới đây
 # Nếu chưa có, cứ để nguyên link mặc định này (Công an hiệu)
-LOGO_URL = "https://drive.google.com/uc?export=view&id=1PsUr01oeleJkW2JB1gqnID9WJNsTMFGW/" 
+LOGO_URL = "https://drive.google.com/uc?export=view&id=1PsUr01oeleJkW2JB1gqnID9WJNsTMFGW" 
 # ----------------------------------------
 
 # MÀU SẮC CHỦ ĐẠO (Xanh Cảnh sát)
