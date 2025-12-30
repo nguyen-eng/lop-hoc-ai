@@ -5,6 +5,7 @@ import os
 import plotly.express as px
 import time
 from datetime import datetime
+import threading # <--- 1. Import thư viện luồng
 
 # ==========================================
 # 1. CẤU HÌNH HỆ THỐNG
@@ -16,13 +17,15 @@ st.set_page_config(
     initial_sidebar_state="expanded"
 )
 
-# --- 🖼️ KHU VỰC THAY LOGO NHÀ TRƯỜNG ---
-# Thầy dán link ảnh logo của Thầy vào giữa hai dấu ngoặc kép dưới đây
-# Nếu chưa có, cứ để nguyên link mặc định này (Công an hiệu)
-LOGO_URL = "https://drive.google.com/uc?export=view&id=1PsUr01oeleJkW2JB1gqnID9WJNsTMFGW" 
-# ----------------------------------------
+# --- KHÓA AN TOÀN DỮ LIỆU ---
+data_lock = threading.Lock() # <--- 2. Tạo ổ khóa
+# ----------------------------
 
-# MÀU SẮC CHỦ ĐẠO (Xanh Cảnh sát)
+# --- LINK LOGO CỦA THẦY ---
+# Lưu ý: Thầy nhớ mở quyền "Bất kỳ ai có link" cho file này trên Drive nhé!
+LOGO_URL = "https://drive.google.com/uc?export=view&id=1PsUr01oeleJkW2JB1gqnID9WJNsTMFGW"
+# --------------------------
+
 PRIMARY_COLOR = "#047857"
 BG_COLOR = "#f3f4f6"
 
@@ -30,25 +33,23 @@ st.markdown(f"""
 <style>
     @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap');
     html, body, [class*="css"] {{ font-family: 'Inter', sans-serif; background-color: {BG_COLOR}; }}
-    
-    /* Ẩn Header mặc định */
     header {{visibility: hidden;}} footer {{visibility: hidden;}}
-    
-    /* Sidebar màu tối */
     [data-testid="stSidebar"] {{ background-color: #0f172a; border-right: 1px solid #1e293b; }}
     [data-testid="stSidebar"] h1, h2, h3 {{ color: white !important; }}
     [data-testid="stSidebar"] p, span, label {{ color: #94a3b8 !important; }}
-    
-    /* Card design */
     .metric-box {{ background: white; padding: 20px; border-radius: 12px; box-shadow: 0 4px 6px rgba(0,0,0,0.05); border-left: 5px solid {PRIMARY_COLOR}; text-align: center; }}
-    
-    /* Button */
     div.stButton > button {{ background-color: {PRIMARY_COLOR}; color: white; border: none; border-radius: 6px; padding: 0.5rem 1.5rem; font-weight: 600; width: 100%; transition: all 0.2s; }}
     div.stButton > button:hover {{ background-color: #065f46; transform: translateY(-2px); }}
+    
+    /* Căn giữa ảnh logo trong sidebar */
+    [data-testid="stSidebar"] img {{
+        display: block;
+        margin-left: auto;
+        margin-right: auto;
+    }}
 </style>
 """, unsafe_allow_html=True)
 
-# --- KẾT NỐI AI ---
 try:
     api_key = st.secrets["GEMINI_API_KEY"]
     genai.configure(api_key=api_key)
@@ -60,24 +61,31 @@ except:
 # 2. XỬ LÝ DỮ LIỆU & MẬT KHẨU
 # ==========================================
 
-# --- CẤU HÌNH MẬT KHẨU (BẢO MẬT) ---
 CLASSES = {f"Lớp {i}": f"lop{i}" for i in range(1, 11)}
 
-# Tạo mật khẩu mặc định (LH2 -> LH10)
-PASSWORDS = {f"lop{i}": f"LH{i}" for i in range(1, 11)}
-# Cập nhật riêng Lớp 1 theo ý Thầy
+# CẤU HÌNH MẬT KHẨU
+PASSWORDS = {}
+for i in range(1, 11):
+    PASSWORDS[f"lop{i}"] = f"LH{i}"
 PASSWORDS["lop1"] = "T05-1" 
 
-# Quản lý Session
 if 'logged_in' not in st.session_state: st.session_state.update({'logged_in': False, 'role': '', 'class_id': ''})
 
-# Hàm file
 def get_path(cls, act): return f"data_{cls}_act{act}.csv"
 
+# --- HÀM GHI FILE AN TOÀN (UPDATED) ---
 def save_data(cls, act, name, content):
-    with open(get_path(cls, act), "a", encoding="utf-8") as f:
-        timestamp = datetime.now().strftime("%Y-%m-%d %H:%M")
-        f.write(f"{name}|{content}|{timestamp}\n")
+    # Xử lý nội dung để tránh lỗi CSV
+    safe_content = content.replace("|", "-").replace("\n", " ")
+    timestamp = datetime.now().strftime("%Y-%m-%d %H:%M")
+    row = f"{name}|{safe_content}|{timestamp}\n"
+    file_path = get_path(cls, act)
+    
+    # Dùng khóa để ghi file an toàn
+    with data_lock: 
+        with open(file_path, "a", encoding="utf-8") as f:
+            f.write(row)
+# --------------------------------------
 
 def load_data(cls, act):
     if os.path.exists(get_path(cls, act)):
@@ -85,9 +93,10 @@ def load_data(cls, act):
     return pd.DataFrame(columns=["Học viên", "Nội dung", "Thời gian"])
 
 def clear_class_data(cls):
-    for i in range(1, 4):
-        p = get_path(cls, i)
-        if os.path.exists(p): os.remove(p)
+    with data_lock: # Khi xóa cũng cần khóa để tránh lỗi
+        for i in range(1, 4):
+            p = get_path(cls, i)
+            if os.path.exists(p): os.remove(p)
 
 def check_progress(cls, name):
     progress = 0
@@ -97,65 +106,66 @@ def check_progress(cls, name):
     return min(progress, 100)
 
 # ==========================================
-# 3. GIAO DIỆN ĐĂNG NHẬP (KHÔNG GỢI Ý PASS)
+# 3. GIAO DIỆN ĐĂNG NHẬP
 # ==========================================
 if not st.session_state['logged_in']:
     col_spacer1, col_main, col_spacer2 = st.columns([1, 1.5, 1])
     with col_main:
         st.markdown("<br><br>", unsafe_allow_html=True)
         with st.container(border=True):
-            # Hiển thị Logo từ link Thầy dán
-            st.markdown(f"""
-                <div style="text-align: center;">
-                    <img src="{LOGO_URL}" width="120" style="margin-bottom: 15px;">
-                    <h2 style="color: {PRIMARY_COLOR}; margin: 0;">CỔNG ĐÀO TẠO T05</h2>
-                    <p style="color: gray; font-size: 14px;">Hệ thống học tập trực tuyến</p>
-                </div>
-            """, unsafe_allow_html=True)
+            # --- PHẦN HIỂN THỊ LOGO (Đã sửa dùng st.image cho ổn định) ---
+            c_logo, c_text = st.columns([1, 3])
+            with c_logo:
+                st.image(LOGO_URL, width=100)
+            with c_text:
+                st.markdown(f"""
+                    <div style="padding-top: 10px;">
+                        <h2 style="color: {PRIMARY_COLOR}; margin: 0;">CỔNG ĐÀO TẠO T05</h2>
+                        <p style="color: gray; font-size: 14px;">Hệ thống học tập trực tuyến</p>
+                    </div>
+                """, unsafe_allow_html=True)
+            # -------------------------------------------------------------
             
             st.divider()
             
             tab_sv, tab_gv = st.tabs(["👨‍🎓 Học viên", "👮‍♂️ Giảng viên"])
             
             with tab_sv:
-                # Chỉ hiện danh sách lớp, KHÔNG hiện gợi ý mật khẩu
                 c_class = st.selectbox("Chọn Lớp sinh hoạt", list(CLASSES.keys()), key="s_class")
                 c_pass = st.text_input("Nhập mật khẩu lớp", type="password", key="s_pass")
                 
                 if st.button("Truy cập Lớp học", use_container_width=True):
                     cls_code = CLASSES[c_class]
-                    # Kiểm tra mật khẩu âm thầm
-                    if c_pass == PASSWORDS[cls_code]:
+                    user_input_pass = c_pass.strip()
+                    
+                    if user_input_pass == PASSWORDS[cls_code]:
                         st.session_state.update({'logged_in': True, 'role': 'student', 'class_id': cls_code})
                         st.rerun()
                     else:
-                        # Thông báo lỗi chung chung, không gợi ý
-                        st.error("Sai mật khẩu. Vui lòng kiểm tra lại.")
+                        st.error(f"Sai mật khẩu cho {c_class}.")
 
             with tab_gv:
                 t_pass = st.text_input("Mật khẩu Giảng viên", type="password", key="t_pass")
                 if st.button("Đăng nhập Quản trị", use_container_width=True):
-                    if t_pass == "T05":
+                    if t_pass.strip() == "T05":
                         st.session_state.update({'logged_in': True, 'role': 'teacher', 'class_id': 'lop1'})
                         st.rerun()
                     else:
                         st.error("Sai mật khẩu quản trị.")
 
 # ==========================================
-# 4. GIAO DIỆN CHÍNH (LMS)
+# 4. GIAO DIỆN CHÍNH
 # ==========================================
 else:
-    # --- SIDEBAR ---
     with st.sidebar:
-        # Logo Sidebar
-        st.image(LOGO_URL, width=70)
+        # LOGO SIDEBAR (Dùng st.image)
+        st.image(LOGO_URL, width=80)
         
-        # Profile Card
         cls_name = [k for k, v in CLASSES.items() if v == st.session_state['class_id']][0]
         role_title = "Học viên" if st.session_state['role'] == 'student' else "Giảng viên"
         
         st.markdown(f"""
-        <div style="background: #1e293b; padding: 15px; border-radius: 8px; margin: 10px 0;">
+        <div style="background: #1e293b; padding: 15px; border-radius: 8px; margin: 10px 0; text-align: center;">
             <p style="color: #94a3b8; margin:0; font-size: 12px;">Xin chào,</p>
             <h4 style="color: white; margin:0;">{role_title}</h4>
             <p style="color: #fbbf24; margin:0; font-size: 13px;">{cls_name}</p>
@@ -169,13 +179,11 @@ else:
              st.divider()
 
         menu = st.radio("MENU", ["📊 Tổng quan", "Module 1: Quan điểm", "Module 2: Quy trình", "Module 3: Thu hoạch", "⚙️ Cài đặt"])
-        
         st.divider()
         if st.button("Đăng xuất"):
             st.session_state.clear()
             st.rerun()
 
-    # --- MAIN CONTENT ---
     st.markdown(f"### 🚩 {cls_name} / {menu}")
     
     # 1. DASHBOARD
