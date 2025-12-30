@@ -21,13 +21,13 @@ st.set_page_config(
 LOGO_URL = "https://drive.google.com/thumbnail?id=1PsUr01oeleJkW2JB1gqnID9WJNsTMFGW&sz=w1000"
 
 # --- MÀU SẮC & FONT ---
-PRIMARY_COLOR = "#006a4e" # Xanh lục bảo đậm (Màu truyền thống ngành)
-BG_COLOR = "#f8fafc"      # Trắng sứ (Sạch sẽ)
-TEXT_COLOR = "#111827"    # Đen đậm (Dễ đọc)
+PRIMARY_COLOR = "#006a4e" # Xanh lục bảo đậm
+BG_COLOR = "#f8fafc"      # Trắng sứ
+TEXT_COLOR = "#111827"    # Đen đậm
 
 st.markdown(f"""
 <style>
-    /* NHÚNG FONT MONTSERRAT TỪ GOOGLE */
+    /* NHÚNG FONT MONTSERRAT */
     @import url('https://fonts.googleapis.com/css2?family=Montserrat:wght@400;500;600;700;800&display=swap');
     
     html, body, [class*="css"] {{
@@ -36,50 +36,57 @@ st.markdown(f"""
         color: {TEXT_COLOR};
     }}
     
-    /* Ẩn Header/Footer */
     header {{visibility: hidden;}} footer {{visibility: hidden;}}
     
-    /* LOGIN CARD (Trang trọng, Đậm nét) */
+    /* LOGIN CARD */
     .login-container {{
         background-color: white;
-        padding: 50px 30px;
+        padding: 40px 30px;
         border-radius: 12px;
-        box-shadow: 0 4px 20px rgba(0,0,0,0.08); /* Bóng đổ nhẹ nhưng sâu */
+        box-shadow: 0 4px 20px rgba(0,0,0,0.08);
         text-align: center;
-        max-width: 550px;
+        max-width: 600px; /* Mở rộng một chút để chứa tên khoa dài */
         margin: 0 auto;
-        border-top: 6px solid {PRIMARY_COLOR}; /* Điểm nhấn màu ngành */
+        border-top: 6px solid {PRIMARY_COLOR};
     }}
     
     .school-name {{
         font-family: 'Montserrat', sans-serif;
         font-size: 22px;
-        font-weight: 800; /* Rất đậm */
-        color: #b91c1c; /* Màu đỏ cờ hoặc giữ màu xanh ngành tùy thầy */
+        font-weight: 800;
+        color: #b91c1c; /* Đỏ cờ */
         text-transform: uppercase;
         margin-top: 15px;
         letter-spacing: 0.5px;
     }}
     
     .system-name {{
-        font-size: 16px;
-        font-weight: 600;
+        font-size: 15px;
+        font-weight: 700;
+        color: #374151;
+        margin-top: 5px;
+        text-transform: uppercase;
+    }}
+
+    /* CSS CHO PHẦN THÔNG TIN MỚI THÊM */
+    .info-section {{
+        margin-top: 15px;
+        padding-top: 15px;
+        border-top: 1px solid #e5e7eb; /* Đường gạch ngang mờ */
+        font-size: 14px;
         color: #4b5563;
-        margin-bottom: 30px;
+        line-height: 1.6;
+    }}
+    .info-label {{
+        font-weight: 600;
+        color: {PRIMARY_COLOR};
     }}
     
     /* SIDEBAR */
     [data-testid="stSidebar"] {{ background-color: #0f172a; }}
     [data-testid="stSidebar"] * {{ font-family: 'Montserrat', sans-serif; }}
     
-    /* INPUT FIELDS (Rõ ràng hơn) */
-    .stTextInput input {{
-        border: 1px solid #cbd5e1;
-        color: #1e293b;
-        font-weight: 500;
-    }}
-    
-    /* BUTTON (Màu ngành, bo góc nhẹ) */
+    /* BUTTON */
     div.stButton > button {{
         background-color: {PRIMARY_COLOR};
         color: white;
@@ -87,7 +94,6 @@ st.markdown(f"""
         border-radius: 6px;
         padding: 0.7rem 1.5rem;
         font-weight: 700;
-        letter-spacing: 0.5px;
         width: 100%;
         text-transform: uppercase;
     }}
@@ -95,7 +101,7 @@ st.markdown(f"""
     
     /* TABS */
     .stTabs [data-baseweb="tab-list"] {{ justify-content: center; }}
-    .stTabs [data-baseweb="tab"] {{ font-weight: 600; color: #64748b; }}
+    .stTabs [data-baseweb="tab"] {{ font-weight: 600; }}
     .stTabs [data-baseweb="tab"][aria-selected="true"] {{ color: {PRIMARY_COLOR}; }}
 
 </style>
@@ -146,19 +152,24 @@ def check_progress(cls, name):
     return min(prog, 100)
 
 # ==========================================
-# 3. MÀN HÌNH ĐĂNG NHẬP (FORMAL STYLE)
+# 3. MÀN HÌNH ĐĂNG NHẬP (CẬP NHẬT THÔNG TIN)
 # ==========================================
 if not st.session_state['logged_in']:
     st.markdown("<br><br>", unsafe_allow_html=True)
     c1, c2, c3 = st.columns([1, 2, 1])
     
     with c2:
-        # LOGO & TIÊU ĐỀ (HTML TÙY CHỈNH CHO ĐẸP)
+        # LOGO & TIÊU ĐỀ & THÔNG TIN GIẢNG VIÊN
         st.markdown(f"""
         <div class="login-container">
             <img src="{LOGO_URL}" width="110" style="margin-bottom: 15px;">
             <div class="school-name">TRƯỜNG ĐẠI HỌC CẢNH SÁT NHÂN DÂN</div>
             <div class="system-name">HỆ THỐNG HỌC TẬP TRỰC TUYẾN (T05)</div>
+            
+            <div class="info-section">
+                <div><span class="info-label">Đơn vị:</span> Khoa Lý luận chính trị và Khoa học xã hội nhân văn</div>
+                <div><span class="info-label">Giảng viên:</span> Trần Nguyễn Sĩ Nguyên</div>
+            </div>
         </div>
         """, unsafe_allow_html=True)
         
@@ -171,7 +182,7 @@ if not st.session_state['logged_in']:
                 c_class = st.selectbox("Lớp sinh hoạt", list(CLASSES.keys()), key="s_class")
                 c_pass = st.text_input("Mã bảo mật", type="password", key="s_pass")
                 
-                st.write("") # Khoảng cách
+                st.write("")
                 if st.button("ĐĂNG NHẬP NGAY"):
                     cls_code = CLASSES[c_class]
                     if c_pass.strip() == PASSWORDS[cls_code]:
@@ -241,7 +252,6 @@ else:
         
         c1, c2, c3, c4 = st.columns(4)
         
-        # CSS cho Metric Card
         st.markdown("""
         <style>
         .metric-card { background: white; padding: 20px; border-radius: 8px; border: 1px solid #e2e8f0; text-align: center; }
