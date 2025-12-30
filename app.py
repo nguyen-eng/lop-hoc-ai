@@ -23,7 +23,8 @@ data_lock = threading.Lock() # <--- 2. Tạo ổ khóa
 
 # --- LINK LOGO CỦA THẦY ---
 # Lưu ý: Thầy nhớ mở quyền "Bất kỳ ai có link" cho file này trên Drive nhé!
-LOGO_URL = "https://drive.google.com/uc?export=view&id=1PsUr01oeleJkW2JB1gqnID9WJNsTMFGW"
+# Copy dòng này thay thế vào code app.py
+LOGO_URL = "https://drive.google.com/thumbnail?id=1PsUr01oeleJkW2JB1gqnID9WJNsTMFGW&sz=w1000"
 # --------------------------
 
 PRIMARY_COLOR = "#047857"
