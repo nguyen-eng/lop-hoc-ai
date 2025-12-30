@@ -44,7 +44,7 @@ st.markdown(f"""
         border-radius: 12px;
         box-shadow: 0 4px 20px rgba(0,0,0,0.08);
         text-align: center;
-        max-width: 650px;
+        max-width: 650px; 
         margin: 0 auto;
         border-top: 6px solid {PRIMARY_COLOR};
     }}
@@ -68,7 +68,7 @@ st.markdown(f"""
         margin-bottom: 20px;
     }}
 
-    /* INFO SECTION - ĐÃ KHẮC PHỤC LỖI HIỂN THỊ */
+    /* INFO SECTION - STYLE */
     .info-box {{
         background-color: #f1f5f9;
         padding: 15px;
@@ -81,6 +81,7 @@ st.markdown(f"""
     .info-line {{
         margin-bottom: 5px;
         color: #475569;
+        display: block; /* Đảm bảo xuống dòng */
     }}
     .info-label {{
         font-weight: 700;
@@ -158,20 +159,19 @@ def check_progress(cls, name):
     return min(prog, 100)
 
 # ==========================================
-# 3. MÀN HÌNH ĐĂNG NHẬP (ĐÃ SỬA LỖI CODE BLOCK)
+# 3. MÀN HÌNH ĐĂNG NHẬP (ĐÃ KHẮC PHỤC LỖI INDENTATION)
 # ==========================================
 if not st.session_state['logged_in']:
     st.markdown("<br><br>", unsafe_allow_html=True)
     c1, c2, c3 = st.columns([1, 2, 1])
     
     with c2:
-        # --- HTML ĐƯỢC VIẾT SÁT LỀ TRÁI ĐỂ TRÁNH LỖI ---
-        login_html = f"""
+        # --- HTML ĐƯỢC VIẾT SÁT LỀ TRÁI ĐỂ TRÁNH LỖI FORMAT ---
+        st.markdown(f"""
 <div class="login-container">
     <img src="{LOGO_URL}" width="110" style="margin-bottom: 15px;">
     <div class="school-name">TRƯỜNG ĐẠI HỌC CẢNH SÁT NHÂN DÂN</div>
     <div class="system-name">HỆ THỐNG HỌC TẬP TRỰC TUYẾN (T05)</div>
-    
     <div class="info-box">
         <div class="info-line">
             <span class="info-label">Đơn vị:</span> Khoa Lý luận chính trị và Khoa học xã hội nhân văn
@@ -181,9 +181,8 @@ if not st.session_state['logged_in']:
         </div>
     </div>
 </div>
-"""
-        st.markdown(login_html, unsafe_allow_html=True)
-        # -----------------------------------------------
+""", unsafe_allow_html=True)
+        # -------------------------------------------------------
         
         st.write("") 
         
