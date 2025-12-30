@@ -17,17 +17,16 @@ st.set_page_config(
     initial_sidebar_state="collapsed"
 )
 
-# --- LOGO (Dùng link thumbnail ổn định) ---
+# --- LOGO ---
 LOGO_URL = "https://drive.google.com/thumbnail?id=1PsUr01oeleJkW2JB1gqnID9WJNsTMFGW&sz=w1000"
 
 # --- MÀU SẮC & FONT ---
-PRIMARY_COLOR = "#006a4e" # Xanh lục bảo đậm
-BG_COLOR = "#f8fafc"      # Trắng sứ
-TEXT_COLOR = "#111827"    # Đen đậm
+PRIMARY_COLOR = "#006a4e" 
+BG_COLOR = "#f8fafc"      
+TEXT_COLOR = "#111827"    
 
 st.markdown(f"""
 <style>
-    /* NHÚNG FONT MONTSERRAT */
     @import url('https://fonts.googleapis.com/css2?family=Montserrat:wght@400;500;600;700;800&display=swap');
     
     html, body, [class*="css"] {{
@@ -45,7 +44,7 @@ st.markdown(f"""
         border-radius: 12px;
         box-shadow: 0 4px 20px rgba(0,0,0,0.08);
         text-align: center;
-        max-width: 600px; /* Mở rộng một chút để chứa tên khoa dài */
+        max-width: 650px; /* Rộng hơn chút để đẹp */
         margin: 0 auto;
         border-top: 6px solid {PRIMARY_COLOR};
     }}
@@ -54,7 +53,7 @@ st.markdown(f"""
         font-family: 'Montserrat', sans-serif;
         font-size: 22px;
         font-weight: 800;
-        color: #b91c1c; /* Đỏ cờ */
+        color: #b91c1c;
         text-transform: uppercase;
         margin-top: 15px;
         letter-spacing: 0.5px;
@@ -66,20 +65,27 @@ st.markdown(f"""
         color: #374151;
         margin-top: 5px;
         text-transform: uppercase;
+        margin-bottom: 20px;
     }}
 
-    /* CSS CHO PHẦN THÔNG TIN MỚI THÊM */
-    .info-section {{
+    /* INFO SECTION - ĐÃ SỬA LỖI HIỂN THỊ */
+    .info-box {{
+        background-color: #f1f5f9;
+        padding: 15px;
+        border-radius: 8px;
         margin-top: 15px;
-        padding-top: 15px;
-        border-top: 1px solid #e5e7eb; /* Đường gạch ngang mờ */
+        text-align: left;
         font-size: 14px;
-        color: #4b5563;
-        line-height: 1.6;
+        border-left: 4px solid {PRIMARY_COLOR};
+    }}
+    .info-line {{
+        margin-bottom: 5px;
+        color: #475569;
     }}
     .info-label {{
-        font-weight: 600;
+        font-weight: 700;
         color: {PRIMARY_COLOR};
+        margin-right: 5px;
     }}
     
     /* SIDEBAR */
@@ -115,7 +121,7 @@ try:
 except: pass
 
 # ==========================================
-# 2. BACKEND (LOGIC)
+# 2. BACKEND
 # ==========================================
 data_lock = threading.Lock()
 CLASSES = {f"Lớp {i}": f"lop{i}" for i in range(1, 11)}
@@ -152,28 +158,34 @@ def check_progress(cls, name):
     return min(prog, 100)
 
 # ==========================================
-# 3. MÀN HÌNH ĐĂNG NHẬP (CẬP NHẬT THÔNG TIN)
+# 3. MÀN HÌNH ĐĂNG NHẬP (ĐÃ SỬA LỖI HTML)
 # ==========================================
 if not st.session_state['logged_in']:
     st.markdown("<br><br>", unsafe_allow_html=True)
     c1, c2, c3 = st.columns([1, 2, 1])
     
     with c2:
-        # LOGO & TIÊU ĐỀ & THÔNG TIN GIẢNG VIÊN
+        # --- HTML ĐƯỢC VIẾT LIỀN MẠCH TRONG F-STRING ---
         st.markdown(f"""
         <div class="login-container">
             <img src="{LOGO_URL}" width="110" style="margin-bottom: 15px;">
             <div class="school-name">TRƯỜNG ĐẠI HỌC CẢNH SÁT NHÂN DÂN</div>
             <div class="system-name">HỆ THỐNG HỌC TẬP TRỰC TUYẾN (T05)</div>
             
-            <div class="info-section">
-                <div><span class="info-label">Đơn vị:</span> Khoa Lý luận chính trị và Khoa học xã hội nhân văn</div>
-                <div><span class="info-label">Giảng viên:</span> Trần Nguyễn Sĩ Nguyên</div>
+            <div class="info-box">
+                <div class="info-line">
+                    <span class="info-label">Đơn vị:</span> Khoa Lý luận chính trị và Khoa học xã hội nhân văn
+                </div>
+                <div class="info-line">
+                    <span class="info-label">Giảng viên:</span> Trần Nguyễn Sĩ Nguyên
+                </div>
             </div>
         </div>
         """, unsafe_allow_html=True)
+        # -----------------------------------------------
         
-        # TABS ĐĂNG NHẬP
+        st.write("") # Khoảng cách nhỏ
+        
         tab_sv, tab_gv = st.tabs(["CỔNG HỌC VIÊN", "CỔNG GIẢNG VIÊN"])
         
         with tab_sv:
@@ -204,10 +216,9 @@ if not st.session_state['logged_in']:
                         st.error("Sai mật khẩu T05.")
 
 # ==========================================
-# 4. GIAO DIỆN CHÍNH (DASHBOARD)
+# 4. GIAO DIỆN CHÍNH
 # ==========================================
 else:
-    # SIDEBAR
     with st.sidebar:
         st.image(LOGO_URL, width=90)
         
@@ -236,14 +247,12 @@ else:
             st.session_state.clear()
             st.rerun()
 
-    # HEADER TRANG
     st.markdown(f"""
     <h2 style="color: {PRIMARY_COLOR}; font-weight: 800; border-bottom: 2px solid #e5e7eb; padding-bottom: 10px;">
         {menu.split(" ")[1]} <span style="font-weight: 400; color: #6b7280; font-size: 20px;">/ {cls_name}</span>
     </h2>
     """, unsafe_allow_html=True)
 
-    # NỘI DUNG
     if "Dashboard" in menu:
         df1 = load_data(st.session_state['class_id'], 1)
         df2 = load_data(st.session_state['class_id'], 2)
