@@ -516,168 +516,312 @@ def render_activity():
     # ------------------------------------------
     # 1) WORD CLOUD (Mentimeter-like, FIX SIZE + CLEAN LAYOUT + ANIMATE)
     # ------------------------------------------
-    if act == "wordcloud":
-        c1, c2 = st.columns([1, 2])
+if act == "wordcloud":
+    c1, c2 = st.columns([1, 2])
 
-        # --- CỘT TRÁI: NHẬP LIỆU ---
-        with c1:
-            st.info(f"Câu hỏi: **{cfg['question']}**")
-            if st.session_state["role"] == "student":
-                with st.form("f_wc"):
-                    n = st.text_input("Tên")
-                    txt = st.text_input("Nhập 1 từ khóa / cụm từ (giữ nguyên cụm)")
-                    if st.form_submit_button("GỬI"):
-                        if n.strip() and txt.strip():
-                            save_data(cid, current_act_key, n, txt)
-                            st.success("Đã gửi!")
-                            time.sleep(0.2)
-                            st.rerun()
-                        else:
-                            st.warning("Vui lòng nhập đủ Tên và Từ khóa.")
-            else:
-                st.warning("Giảng viên xem kết quả bên phải.")
-
-        # --- CỘT PHẢI: HIỂN THỊ KẾT QUẢ ---
-        with c2:
-            st.markdown("##### ☁️ KẾT QUẢ")
-
-            import re
-
-            def normalize_phrase(s: str) -> str:
-                # chuẩn hoá để tránh “trùng nhưng khác kiểu gõ”
-                s = str(s or "").strip().lower()
-                s = re.sub(r"\s+", " ", s)
-                s = s.strip(" .,:;!?\"'`()[]{}<>|\\/+-=*#@~^_")
-                return s
-
-            def menti_color_func(word, font_size, position, orientation, random_state=None, **kwargs):
-                colors = ["#2563eb", "#ef4444", "#06b6d4", "#f97316", "#a855f7", "#22c55e", "#0ea5e9"]
-                return colors[hash(word) % len(colors)]  # cùng từ -> cùng màu (ổn định)
-
-            df = load_data(cid, current_act_key)
-
-            with st.container(border=True):
-                if df.empty:
-                    st.info("Chưa có dữ liệu. Mời lớp nhập từ khóa.")
-                else:
-                    # ===== 1) ĐẾM TẦN SUẤT THEO *SỐ NGƯỜI* (unique học viên) =====
-                    tmp = df[["Học viên", "Nội dung"]].dropna().copy()
-                    tmp["Học viên"] = tmp["Học viên"].astype(str).str.strip()
-                    tmp["phrase"] = tmp["Nội dung"].astype(str).apply(normalize_phrase)
-                    tmp = tmp[(tmp["Học viên"] != "") & (tmp["phrase"] != "")]
-
-                    # 1 học viên gửi lặp cùng 1 cụm -> chỉ tính 1 lần
-                    tmp = tmp.drop_duplicates(subset=["Học viên", "phrase"])
-
-                    # freq = số học viên đã nhập cụm đó
-                    freq_series = tmp["phrase"].value_counts()
-                    freq_dict_full = freq_series.to_dict()
-
-                    # ===== 2) GIẢM “LỘN XỘN”: GIỚI HẠN SỐ TỪ HIỂN THỊ =====
-                    MAX_WORDS_SHOW = 60  # tăng/giảm tuỳ lớp
-                    freq_items = sorted(freq_dict_full.items(), key=lambda x: x[1], reverse=True)[:MAX_WORDS_SHOW]
-                    freq_dict = dict(freq_items)
-
-                    if not freq_dict:
-                        st.info("Chưa có từ/cụm hợp lệ sau khi chuẩn hoá.")
+    # --- CỘT TRÁI: NHẬP LIỆU ---
+    with c1:
+        st.info(f"Câu hỏi: **{cfg['question']}**")
+        if st.session_state["role"] == "student":
+            with st.form("f_wc"):
+                n = st.text_input("Tên")
+                txt = st.text_input("Nhập 1 từ khóa / cụm từ (giữ nguyên cụm)")
+                if st.form_submit_button("GỬI"):
+                    if n.strip() and txt.strip():
+                        save_data(cid, current_act_key, n, txt)
+                        st.success("Đã gửi!")
+                        time.sleep(0.2)
+                        st.rerun()
                     else:
-                        # ===== 3) FIX LỖI “TẤT CẢ = 1 NHƯNG VẪN TO/NHỎ” =====
-                        # Nguyên nhân: WordCloud phải “nhét chữ”, khi thiếu chỗ nó tự hạ font cho vài chữ.
-                        # Cách xử lý: canvas lớn + scale lớn + margin lớn + giới hạn số từ
-                        # và nếu max_f == 1 thì ép min_font_size gần max_font_size để đồng cỡ.
-                        max_f = max(freq_dict.values())
+                        st.warning("Vui lòng nhập đủ Tên và Từ khóa.")
+        else:
+            st.warning("Giảng viên xem kết quả bên phải.")
 
-                        # font
-                        font_path_use = None
-                        possible_fonts = [
-                            "assets/fonts/Montserrat-Bold.ttf",
-                            "assets/fonts/Montserrat-SemiBold.ttf",
-                            "Roboto-Bold.ttf",
-                            "arial.ttf",
-                        ]
-                        for f in possible_fonts:
-                            if os.path.exists(f):
-                                font_path_use = f
-                                break
+    # --- CỘT PHẢI: HIỂN THỊ KẾT QUẢ (Mentimeter-like D3 Cloud) ---
+    with c2:
+        st.markdown("##### ☁️ KẾT QUẢ")
+        df = load_data(cid, current_act_key)
 
-                        def build_wc(sub_freq: dict):
-                            # Nếu tất cả cùng tần suất: ép đồng đều
-                            if max(sub_freq.values()) == 1:
-                                min_fs = 56
-                                max_fs = 58
-                                # giữ weight bằng nhau để không tạo chênh lệch
-                                weighted = {w: 100 for w in sub_freq.keys()}
-                            else:
-                                # bậc size (giống Slido/Mentimeter: phổ biến -> gần trung tâm & to rõ)
-                                m = max(sub_freq.values())
+        with st.container(border=True):
+            if df.empty:
+                st.info("Chưa có dữ liệu. Mời lớp nhập từ khóa.")
+            else:
+                import re, json, html
 
-                                def tier(f):
-                                    r = f / m
-                                    if r >= 0.85: return 130
-                                    if r >= 0.65: return 110
-                                    if r >= 0.45: return 92
-                                    if r >= 0.30: return 76
-                                    if r >= 0.18: return 62
-                                    return 50
+                def normalize_phrase(s: str) -> str:
+                    # Chuẩn hoá để gộp các biến thể (Mentimeter-style)
+                    s = str(s or "").strip().lower()
+                    s = re.sub(r"\s+", " ", s)
+                    s = s.strip(" .,:;!?\"'`()[]{}<>|\\/+-=*#@~^_")
+                    return s
 
-                                min_fs = 24
-                                max_fs = 140
-                                # tăng trọng số để wordcloud ưu tiên placement theo độ phổ biến
-                                weighted = {w: (f * 1000 + tier(f)) for w, f in sub_freq.items()}
+                # 1) Đếm vote theo "SỐ NGƯỜI" (unique học viên) cho mỗi phrase
+                tmp = df[["Học viên", "Nội dung"]].dropna().copy()
+                tmp["Học viên"] = tmp["Học viên"].astype(str).str.strip()
+                tmp["phrase"] = tmp["Nội dung"].astype(str).apply(normalize_phrase)
+                tmp = tmp[(tmp["Học viên"] != "") & (tmp["phrase"] != "")]
+                tmp = tmp.drop_duplicates(subset=["Học viên", "phrase"])  # 1 người, 1 phiếu cho 1 cụm
 
-                            wc = WordCloud(
-                                font_path=font_path_use,
-                                width=1800,
-                                height=900,
-                                background_color="white",
-                                max_words=len(sub_freq),
-                                prefer_horizontal=1.0,
-                                relative_scaling=0.0,   # ổn định size theo rank
-                                margin=18,
-                                collocations=False,
-                                normalize_plurals=False,
-                                random_state=42,
-                                scale=2,               # nét + dễ “nhét” chữ hơn => ít phải hạ font
-                                min_font_size=min_fs,
-                                max_font_size=max_fs,
-                            ).generate_from_frequencies(weighted)
+                freq = tmp["phrase"].value_counts().to_dict()
 
-                            return wc.recolor(color_func=menti_color_func, random_state=42)
+                if not freq:
+                    st.info("Chưa có từ/cụm hợp lệ sau khi chuẩn hoá.")
+                else:
+                    # Giới hạn để tránh rối (thực tế Mentimeter cũng giới hạn)
+                    MAX_WORDS_SHOW = 80
+                    items = sorted(freq.items(), key=lambda x: x[1], reverse=True)[:MAX_WORDS_SHOW]
 
-                        # ===== 4) HIỆU ỨNG XUẤT HIỆN TỪ TỪ (từ trung tâm lan ra) =====
-                        # (mỗi đợt thêm 1 nhóm từ theo mức phổ biến)
-                        placeholder = st.empty()
+                    words_payload = [{"text": k, "value": int(v)} for k, v in items]
+                    words_json = json.dumps(words_payload, ensure_ascii=False)
 
-                        words_sorted = sorted(freq_dict.items(), key=lambda x: x[1], reverse=True)
-                        n_words = len(words_sorted)
+                    total_answers = int(df["Nội dung"].dropna().shape[0])
+                    total_people = int(tmp["Học viên"].nunique())
+                    total_unique_phrases = int(len(freq))
 
-                        # số frame vừa đủ mượt nhưng không quá nặng
-                        frames = 8
-                        step = max(1, n_words // frames)
+                    # 2) Render bằng D3 + d3-cloud (spiral + collision-free)
+                    #    - center rule: sau khi layout xong, dịch toàn bộ sao cho top-word nằm đúng tâm canvas
+                    #    - scaleLog cho size (chênh ~3-5 lần)
+                    #    - 70% ngang, 30% dọc -90°
+                    #    - màu modern/vibrant + golden-ratio hue + tránh trùng màu “kề nhau” (xấp xỉ)
+                    #    - animation 800ms ease-out (scale up + move nhẹ)
+                    comp_html = f"""
+<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8"/>
+  <style>
+    body {{ margin:0; background:white; }}
+    #wc-wrap {{
+      width: 100%;
+      height: 520px;
+      border-radius: 12px;
+      background: #ffffff;
+      overflow: hidden;
+    }}
+    svg {{ width:100%; height:100%; display:block; }}
+    .word {{
+      font-family: 'Montserrat', system-ui, -apple-system, Segoe UI, Roboto, Arial, sans-serif;
+      font-weight: 800;
+      cursor: default;
+      user-select: none;
+    }}
+  </style>
+</head>
+<body>
+  <div id="wc-wrap"></div>
 
-                        for k in range(step, n_words + step, step):
-                            sub = dict(words_sorted[:min(k, n_words)])
-                            wc_img = build_wc(sub)
+  <script src="https://cdn.jsdelivr.net/npm/d3@7/dist/d3.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/d3-cloud@1/build/d3.layout.cloud.js"></script>
+  <script>
+    const data = {words_json};
 
-                            fig, ax = plt.subplots(figsize=(12, 6.6))
-                            ax.imshow(wc_img, interpolation="bilinear")
-                            ax.axis("off")
-                            plt.tight_layout(pad=0)
+    const wrap = document.getElementById("wc-wrap");
+    const W = wrap.clientWidth || 900;
+    const H = wrap.clientHeight || 520;
 
-                            placeholder.pyplot(fig)
-                            time.sleep(0.12)
+    // --- Stable RNG for layout stability (less jumping) ---
+    // Mulberry32
+    function mulberry32(a) {{
+      return function() {{
+        var t = a += 0x6D2B79F5;
+        t = Math.imul(t ^ t >>> 15, t | 1);
+        t ^= t + Math.imul(t ^ t >>> 7, t | 61);
+        return ((t ^ t >>> 14) >>> 0) / 4294967296;
+      }}
+    }}
+    const rng = mulberry32(42);
 
-                        # ===== 5) THỐNG KÊ KIỂM CHỨNG =====
-                        total_answers = len(df["Nội dung"].dropna())
-                        total_unique_people = tmp["Học viên"].nunique()
-                        total_unique_phrases = len(freq_series)
+    // --- Log scale for font sizes (3-5x gap) ---
+    const vals = data.map(d => d.value);
+    const vmin = Math.max(1, d3.min(vals));
+    const vmax = Math.max(1, d3.max(vals));
 
-                        st.caption(
-                            f"👥 Lượt gửi: **{total_answers}** • 👤 Người tham gia (unique): **{total_unique_people}** • 🧩 Cụm duy nhất: **{total_unique_phrases}**"
-                        )
+    const fontScale = d3.scaleLog()
+      .domain([vmin, vmax])
+      .range([28, 110])
+      .clamp(true);
 
-                        topk = pd.DataFrame(freq_items, columns=["Từ/cụm (chuẩn hoá)", "Số người nhập"])
-                        st.dataframe(topk, use_container_width=True, hide_index=True)
+    // --- Orientation: 70% horizontal, 30% vertical (-90) ---
+    function rotateFn() {{
+      return (rng() < 0.70) ? 0 : -90;
+    }}
+
+    // --- Modern/Vibrant color using golden ratio hue ---
+    const GOLDEN_RATIO = 0.61803398875;
+    let hue = 0.12; // seed
+
+    function nextColor(prevHue) {{
+      hue = (hue + GOLDEN_RATIO) % 1.0;
+      let h = hue * 360;
+
+      // If too close to previous hue, shift a bit
+      if (prevHue !== null) {{
+        const diff = Math.abs(h - prevHue);
+        if (diff < 22) h = (h + 35) % 360;
+      }}
+
+      // Vibrant but not neon: HSL
+      return {{ color: `hsl(${h}, 85%, 52%)`, hue: h }};
+    }}
+
+    // --- Build words (sorted desc so big ones placed first) ---
+    const words = data
+      .slice()
+      .sort((a,b) => d3.descending(a.value, b.value))
+      .map((d,i) => ({{
+        text: d.text,
+        value: d.value,
+        size: Math.round(fontScale(d.value)),
+        rotate: rotateFn(),
+        __key: d.text
+      }}));
+
+    // --- SVG ---
+    const svg = d3.select("#wc-wrap").append("svg")
+      .attr("viewBox", `0 0 ${W} ${H}`);
+
+    const g = svg.append("g")
+      .attr("transform", `translate(${W/2},${H/2})`);
+
+    // --- Keep previous positions for smooth transitions ---
+    const prev = new Map(); // key -> {{x,y,rotate,size,color}}
+    // Try restore from sessionStorage
+    try {{
+      const saved = sessionStorage.getItem("wc_prev");
+      if (saved) {{
+        const obj = JSON.parse(saved);
+        Object.keys(obj).forEach(k => prev.set(k, obj[k]));
+      }}
+    }} catch(e) {{}}
+
+    function savePrev(map) {{
+      try {{
+        const obj = {{}};
+        map.forEach((v,k)=> obj[k]=v);
+        sessionStorage.setItem("wc_prev", JSON.stringify(obj));
+      }} catch(e) {{}}
+    }}
+
+    // --- Layout: spiral + collision detection is built-in ---
+    const layout = d3.layout.cloud()
+      .size([W, H])
+      .words(words)
+      .padding(6)                 // khoảng cách chữ thoáng
+      .spiral("archimedean")       // spiral
+      .rotate(d => d.rotate)
+      .font("Montserrat")
+      .fontSize(d => d.size)
+      .random(() => rng());
+
+    layout.on("end", draw);
+    layout.start();
+
+    function draw(placed) {{
+      // Rule center: top word must be at (0,0) after transform
+      // placed[0] is highest freq due to sorting.
+      const top = placed[0];
+      const dx = top ? -top.x : 0;
+      const dy = top ? -top.y : 0;
+
+      placed.forEach(w => {{
+        w.x = w.x + dx;
+        w.y = w.y + dy;
+      }});
+
+      // Assign colors with adjacency-avoid approximation (draw order)
+      let prevHue = null;
+      const colorMap = new Map();
+      placed.forEach((w,i) => {{
+        // keep previous color if exists (stability)
+        const p = prev.get(w.__key);
+        if (p && p.color) {{
+          colorMap.set(w.__key, p.color);
+          // approximate prevHue from stored
+          prevHue = p.hue ?? prevHue;
+        }} else {{
+          const c = nextColor(prevHue);
+          colorMap.set(w.__key, c);
+          prevHue = c.hue;
+        }}
+      }});
+
+      // DATA JOIN
+      const sel = g.selectAll("text.word")
+        .data(placed, d => d.__key);
+
+      // EXIT
+      sel.exit()
+        .transition().duration(400)
+        .style("opacity", 0)
+        .remove();
+
+      // ENTER
+      const enter = sel.enter().append("text")
+        .attr("class", "word")
+        .attr("text-anchor", "middle")
+        .style("opacity", 0)
+        .style("transform-origin", "center")
+        .text(d => d.text);
+
+      // MERGE
+      const merged = enter.merge(sel);
+
+      merged.each(function(d) {{
+        const node = d3.select(this);
+        const p = prev.get(d.__key);
+
+        // starting point for smoothness:
+        const x0 = p ? p.x : d.x;
+        const y0 = p ? p.y : d.y;
+        const r0 = p ? p.rotate : d.rotate;
+        const s0 = p ? p.size : 0;          // new words scale from 0
+        const c0 = p ? p.color : null;
+
+        const c = colorMap.get(d.__key);
+        const col = c.color ? c.color : c;  // stored/new
+
+        node
+          .attr("transform", `translate(${x0},${y0}) rotate(${r0})`)
+          .style("fill", col)
+          .style("font-size", `${s0}px`);
+      }});
+
+      // TRANSITION (800ms, ease-out)
+      merged.transition()
+        .duration(800)
+        .ease(d3.easeCubicOut)
+        .style("opacity", 1)
+        .attr("transform", d => `translate(${d.x},${d.y}) rotate(${d.rotate})`)
+        .style("font-size", d => `${d.size}px`);
+
+      // Update prev map
+      const nextPrev = new Map();
+      placed.forEach(d => {{
+        const c = colorMap.get(d.__key);
+        if (c && c.color) {{
+          nextPrev.set(d.__key, {{x:d.x, y:d.y, rotate:d.rotate, size:d.size, color:c, hue:c.hue}});
+        }} else {{
+          nextPrev.set(d.__key, {{x:d.x, y:d.y, rotate:d.rotate, size:d.size, color:c}});
+        }}
+      }});
+      savePrev(nextPrev);
+    }}
+  </script>
+</body>
+</html>
+"""
+
+                    # Render component
+                    st.components.v1.html(comp_html, height=540, scrolling=False)
+
+                    st.caption(
+                        f"👥 Lượt gửi: **{total_answers}** • 👤 Người tham gia (unique): **{total_people}** • 🧩 Cụm duy nhất: **{total_unique_phrases}**"
+                    )
+
+                    # (Tuỳ chọn) bảng top để kiểm chứng tần suất theo số người
+                    topk = pd.DataFrame(items[:20], columns=["Từ/cụm (chuẩn hoá)", "Số người nhập"])
+                    st.dataframe(topk, use_container_width=True, hide_index=True)
+
 
  
     # ------------------------------------------
