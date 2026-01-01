@@ -537,7 +537,6 @@ def render_activity():
         with c2:
             st.markdown("##### ☁️ KẾT QUẢ")
             df = load_data(cid, current_act_key)
-
             with st.container(border=True):
                 if not df.empty:
                     # =========================
