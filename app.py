@@ -516,311 +516,311 @@ def render_activity():
     # ------------------------------------------
     # 1) WORD CLOUD (Mentimeter-like, FIX SIZE + CLEAN LAYOUT + ANIMATE)
     # ------------------------------------------
-if act == "wordcloud":
-    c1, c2 = st.columns([1, 2])
-
-    # --- CỘT TRÁI: NHẬP LIỆU ---
-    with c1:
-        st.info(f"Câu hỏi: **{cfg['question']}**")
-        if st.session_state["role"] == "student":
-            with st.form("f_wc"):
-                n = st.text_input("Tên")
-                txt = st.text_input("Nhập 1 từ khóa / cụm từ (giữ nguyên cụm)")
-                if st.form_submit_button("GỬI"):
-                    if n.strip() and txt.strip():
-                        save_data(cid, current_act_key, n, txt)
-                        st.success("Đã gửi!")
-                        time.sleep(0.2)
-                        st.rerun()
-                    else:
-                        st.warning("Vui lòng nhập đủ Tên và Từ khóa.")
-        else:
-            st.warning("Giảng viên xem kết quả bên phải.")
-
-    # --- CỘT PHẢI: HIỂN THỊ KẾT QUẢ (Mentimeter-like D3 Cloud) ---
-    with c2:
-        st.markdown("##### ☁️ KẾT QUẢ")
-        df = load_data(cid, current_act_key)
-
-        with st.container(border=True):
-            if df.empty:
-                st.info("Chưa có dữ liệu. Mời lớp nhập từ khóa.")
+    if act == "wordcloud":
+        c1, c2 = st.columns([1, 2])
+    
+        # --- CỘT TRÁI: NHẬP LIỆU ---
+        with c1:
+            st.info(f"Câu hỏi: **{cfg['question']}**")
+            if st.session_state["role"] == "student":
+                with st.form("f_wc"):
+                    n = st.text_input("Tên")
+                    txt = st.text_input("Nhập 1 từ khóa / cụm từ (giữ nguyên cụm)")
+                    if st.form_submit_button("GỬI"):
+                        if n.strip() and txt.strip():
+                            save_data(cid, current_act_key, n, txt)
+                            st.success("Đã gửi!")
+                            time.sleep(0.2)
+                            st.rerun()
+                        else:
+                            st.warning("Vui lòng nhập đủ Tên và Từ khóa.")
             else:
-                import re, json, html
-
-                def normalize_phrase(s: str) -> str:
-                    # Chuẩn hoá để gộp các biến thể (Mentimeter-style)
-                    s = str(s or "").strip().lower()
-                    s = re.sub(r"\s+", " ", s)
-                    s = s.strip(" .,:;!?\"'`()[]{}<>|\\/+-=*#@~^_")
-                    return s
-
-                # 1) Đếm vote theo "SỐ NGƯỜI" (unique học viên) cho mỗi phrase
-                tmp = df[["Học viên", "Nội dung"]].dropna().copy()
-                tmp["Học viên"] = tmp["Học viên"].astype(str).str.strip()
-                tmp["phrase"] = tmp["Nội dung"].astype(str).apply(normalize_phrase)
-                tmp = tmp[(tmp["Học viên"] != "") & (tmp["phrase"] != "")]
-                tmp = tmp.drop_duplicates(subset=["Học viên", "phrase"])  # 1 người, 1 phiếu cho 1 cụm
-
-                freq = tmp["phrase"].value_counts().to_dict()
-
-                if not freq:
-                    st.info("Chưa có từ/cụm hợp lệ sau khi chuẩn hoá.")
+                st.warning("Giảng viên xem kết quả bên phải.")
+    
+        # --- CỘT PHẢI: HIỂN THỊ KẾT QUẢ (Mentimeter-like D3 Cloud) ---
+        with c2:
+            st.markdown("##### ☁️ KẾT QUẢ")
+            df = load_data(cid, current_act_key)
+    
+            with st.container(border=True):
+                if df.empty:
+                    st.info("Chưa có dữ liệu. Mời lớp nhập từ khóa.")
                 else:
-                    # Giới hạn để tránh rối (thực tế Mentimeter cũng giới hạn)
-                    MAX_WORDS_SHOW = 80
-                    items = sorted(freq.items(), key=lambda x: x[1], reverse=True)[:MAX_WORDS_SHOW]
-
-                    words_payload = [{"text": k, "value": int(v)} for k, v in items]
-                    words_json = json.dumps(words_payload, ensure_ascii=False)
-
-                    total_answers = int(df["Nội dung"].dropna().shape[0])
-                    total_people = int(tmp["Học viên"].nunique())
-                    total_unique_phrases = int(len(freq))
-
-                    # 2) Render bằng D3 + d3-cloud (spiral + collision-free)
-                    #    - center rule: sau khi layout xong, dịch toàn bộ sao cho top-word nằm đúng tâm canvas
-                    #    - scaleLog cho size (chênh ~3-5 lần)
-                    #    - 70% ngang, 30% dọc -90°
-                    #    - màu modern/vibrant + golden-ratio hue + tránh trùng màu “kề nhau” (xấp xỉ)
-                    #    - animation 800ms ease-out (scale up + move nhẹ)
-                    comp_html = f"""
-<!doctype html>
-<html>
-<head>
-  <meta charset="utf-8"/>
-  <style>
-    body {{ margin:0; background:white; }}
-    #wc-wrap {{
-      width: 100%;
-      height: 520px;
-      border-radius: 12px;
-      background: #ffffff;
-      overflow: hidden;
-    }}
-    svg {{ width:100%; height:100%; display:block; }}
-    .word {{
-      font-family: 'Montserrat', system-ui, -apple-system, Segoe UI, Roboto, Arial, sans-serif;
-      font-weight: 800;
-      cursor: default;
-      user-select: none;
-    }}
-  </style>
-</head>
-<body>
-  <div id="wc-wrap"></div>
-
-  <script src="https://cdn.jsdelivr.net/npm/d3@7/dist/d3.min.js"></script>
-  <script src="https://cdn.jsdelivr.net/npm/d3-cloud@1/build/d3.layout.cloud.js"></script>
-  <script>
-    const data = {words_json};
-
-    const wrap = document.getElementById("wc-wrap");
-    const W = wrap.clientWidth || 900;
-    const H = wrap.clientHeight || 520;
-
-    // --- Stable RNG for layout stability (less jumping) ---
-    // Mulberry32
-    function mulberry32(a) {{
-      return function() {{
-        var t = a += 0x6D2B79F5;
-        t = Math.imul(t ^ t >>> 15, t | 1);
-        t ^= t + Math.imul(t ^ t >>> 7, t | 61);
-        return ((t ^ t >>> 14) >>> 0) / 4294967296;
-      }}
-    }}
-    const rng = mulberry32(42);
-
-    // --- Log scale for font sizes (3-5x gap) ---
-    const vals = data.map(d => d.value);
-    const vmin = Math.max(1, d3.min(vals));
-    const vmax = Math.max(1, d3.max(vals));
-
-    const fontScale = d3.scaleLog()
-      .domain([vmin, vmax])
-      .range([28, 110])
-      .clamp(true);
-
-    // --- Orientation: 70% horizontal, 30% vertical (-90) ---
-    function rotateFn() {{
-      return (rng() < 0.70) ? 0 : -90;
-    }}
-
-    // --- Modern/Vibrant color using golden ratio hue ---
-    const GOLDEN_RATIO = 0.61803398875;
-    let hue = 0.12; // seed
-
-    function nextColor(prevHue) {{
-      hue = (hue + GOLDEN_RATIO) % 1.0;
-      let h = hue * 360;
-
-      // If too close to previous hue, shift a bit
-      if (prevHue !== null) {{
-        const diff = Math.abs(h - prevHue);
-        if (diff < 22) h = (h + 35) % 360;
-      }}
-
-      // Vibrant but not neon: HSL
-      return {{ color: `hsl(${h}, 85%, 52%)`, hue: h }};
-    }}
-
-    // --- Build words (sorted desc so big ones placed first) ---
-    const words = data
-      .slice()
-      .sort((a,b) => d3.descending(a.value, b.value))
-      .map((d,i) => ({{
-        text: d.text,
-        value: d.value,
-        size: Math.round(fontScale(d.value)),
-        rotate: rotateFn(),
-        __key: d.text
-      }}));
-
-    // --- SVG ---
-    const svg = d3.select("#wc-wrap").append("svg")
-      .attr("viewBox", `0 0 ${W} ${H}`);
-
-    const g = svg.append("g")
-      .attr("transform", `translate(${W/2},${H/2})`);
-
-    // --- Keep previous positions for smooth transitions ---
-    const prev = new Map(); // key -> {{x,y,rotate,size,color}}
-    // Try restore from sessionStorage
-    try {{
-      const saved = sessionStorage.getItem("wc_prev");
-      if (saved) {{
-        const obj = JSON.parse(saved);
-        Object.keys(obj).forEach(k => prev.set(k, obj[k]));
-      }}
-    }} catch(e) {{}}
-
-    function savePrev(map) {{
-      try {{
-        const obj = {{}};
-        map.forEach((v,k)=> obj[k]=v);
-        sessionStorage.setItem("wc_prev", JSON.stringify(obj));
-      }} catch(e) {{}}
-    }}
-
-    // --- Layout: spiral + collision detection is built-in ---
-    const layout = d3.layout.cloud()
-      .size([W, H])
-      .words(words)
-      .padding(6)                 // khoảng cách chữ thoáng
-      .spiral("archimedean")       // spiral
-      .rotate(d => d.rotate)
-      .font("Montserrat")
-      .fontSize(d => d.size)
-      .random(() => rng());
-
-    layout.on("end", draw);
-    layout.start();
-
-    function draw(placed) {{
-      // Rule center: top word must be at (0,0) after transform
-      // placed[0] is highest freq due to sorting.
-      const top = placed[0];
-      const dx = top ? -top.x : 0;
-      const dy = top ? -top.y : 0;
-
-      placed.forEach(w => {{
-        w.x = w.x + dx;
-        w.y = w.y + dy;
-      }});
-
-      // Assign colors with adjacency-avoid approximation (draw order)
-      let prevHue = null;
-      const colorMap = new Map();
-      placed.forEach((w,i) => {{
-        // keep previous color if exists (stability)
-        const p = prev.get(w.__key);
-        if (p && p.color) {{
-          colorMap.set(w.__key, p.color);
-          // approximate prevHue from stored
-          prevHue = p.hue ?? prevHue;
-        }} else {{
-          const c = nextColor(prevHue);
-          colorMap.set(w.__key, c);
-          prevHue = c.hue;
+                    import re, json, html
+    
+                    def normalize_phrase(s: str) -> str:
+                        # Chuẩn hoá để gộp các biến thể (Mentimeter-style)
+                        s = str(s or "").strip().lower()
+                        s = re.sub(r"\s+", " ", s)
+                        s = s.strip(" .,:;!?\"'`()[]{}<>|\\/+-=*#@~^_")
+                        return s
+    
+                    # 1) Đếm vote theo "SỐ NGƯỜI" (unique học viên) cho mỗi phrase
+                    tmp = df[["Học viên", "Nội dung"]].dropna().copy()
+                    tmp["Học viên"] = tmp["Học viên"].astype(str).str.strip()
+                    tmp["phrase"] = tmp["Nội dung"].astype(str).apply(normalize_phrase)
+                    tmp = tmp[(tmp["Học viên"] != "") & (tmp["phrase"] != "")]
+                    tmp = tmp.drop_duplicates(subset=["Học viên", "phrase"])  # 1 người, 1 phiếu cho 1 cụm
+    
+                    freq = tmp["phrase"].value_counts().to_dict()
+    
+                    if not freq:
+                        st.info("Chưa có từ/cụm hợp lệ sau khi chuẩn hoá.")
+                    else:
+                        # Giới hạn để tránh rối (thực tế Mentimeter cũng giới hạn)
+                        MAX_WORDS_SHOW = 80
+                        items = sorted(freq.items(), key=lambda x: x[1], reverse=True)[:MAX_WORDS_SHOW]
+    
+                        words_payload = [{"text": k, "value": int(v)} for k, v in items]
+                        words_json = json.dumps(words_payload, ensure_ascii=False)
+    
+                        total_answers = int(df["Nội dung"].dropna().shape[0])
+                        total_people = int(tmp["Học viên"].nunique())
+                        total_unique_phrases = int(len(freq))
+    
+                        # 2) Render bằng D3 + d3-cloud (spiral + collision-free)
+                        #    - center rule: sau khi layout xong, dịch toàn bộ sao cho top-word nằm đúng tâm canvas
+                        #    - scaleLog cho size (chênh ~3-5 lần)
+                        #    - 70% ngang, 30% dọc -90°
+                        #    - màu modern/vibrant + golden-ratio hue + tránh trùng màu “kề nhau” (xấp xỉ)
+                        #    - animation 800ms ease-out (scale up + move nhẹ)
+                        comp_html = f"""
+    <!doctype html>
+    <html>
+    <head>
+      <meta charset="utf-8"/>
+      <style>
+        body {{ margin:0; background:white; }}
+        #wc-wrap {{
+          width: 100%;
+          height: 520px;
+          border-radius: 12px;
+          background: #ffffff;
+          overflow: hidden;
         }}
-      }});
-
-      // DATA JOIN
-      const sel = g.selectAll("text.word")
-        .data(placed, d => d.__key);
-
-      // EXIT
-      sel.exit()
-        .transition().duration(400)
-        .style("opacity", 0)
-        .remove();
-
-      // ENTER
-      const enter = sel.enter().append("text")
-        .attr("class", "word")
-        .attr("text-anchor", "middle")
-        .style("opacity", 0)
-        .style("transform-origin", "center")
-        .text(d => d.text);
-
-      // MERGE
-      const merged = enter.merge(sel);
-
-      merged.each(function(d) {{
-        const node = d3.select(this);
-        const p = prev.get(d.__key);
-
-        // starting point for smoothness:
-        const x0 = p ? p.x : d.x;
-        const y0 = p ? p.y : d.y;
-        const r0 = p ? p.rotate : d.rotate;
-        const s0 = p ? p.size : 0;          // new words scale from 0
-        const c0 = p ? p.color : null;
-
-        const c = colorMap.get(d.__key);
-        const col = c.color ? c.color : c;  // stored/new
-
-        node
-          .attr("transform", `translate(${x0},${y0}) rotate(${r0})`)
-          .style("fill", col)
-          .style("font-size", `${s0}px`);
-      }});
-
-      // TRANSITION (800ms, ease-out)
-      merged.transition()
-        .duration(800)
-        .ease(d3.easeCubicOut)
-        .style("opacity", 1)
-        .attr("transform", d => `translate(${d.x},${d.y}) rotate(${d.rotate})`)
-        .style("font-size", d => `${d.size}px`);
-
-      // Update prev map
-      const nextPrev = new Map();
-      placed.forEach(d => {{
-        const c = colorMap.get(d.__key);
-        if (c && c.color) {{
-          nextPrev.set(d.__key, {{x:d.x, y:d.y, rotate:d.rotate, size:d.size, color:c, hue:c.hue}});
-        }} else {{
-          nextPrev.set(d.__key, {{x:d.x, y:d.y, rotate:d.rotate, size:d.size, color:c}});
+        svg {{ width:100%; height:100%; display:block; }}
+        .word {{
+          font-family: 'Montserrat', system-ui, -apple-system, Segoe UI, Roboto, Arial, sans-serif;
+          font-weight: 800;
+          cursor: default;
+          user-select: none;
         }}
-      }});
-      savePrev(nextPrev);
-    }}
-  </script>
-</body>
-</html>
-"""
-
-                    # Render component
-                    st.components.v1.html(comp_html, height=540, scrolling=False)
-
-                    st.caption(
-                        f"👥 Lượt gửi: **{total_answers}** • 👤 Người tham gia (unique): **{total_people}** • 🧩 Cụm duy nhất: **{total_unique_phrases}**"
-                    )
-
-                    # (Tuỳ chọn) bảng top để kiểm chứng tần suất theo số người
-                    topk = pd.DataFrame(items[:20], columns=["Từ/cụm (chuẩn hoá)", "Số người nhập"])
-                    st.dataframe(topk, use_container_width=True, hide_index=True)
+      </style>
+    </head>
+    <body>
+      <div id="wc-wrap"></div>
+    
+      <script src="https://cdn.jsdelivr.net/npm/d3@7/dist/d3.min.js"></script>
+      <script src="https://cdn.jsdelivr.net/npm/d3-cloud@1/build/d3.layout.cloud.js"></script>
+      <script>
+        const data = {words_json};
+    
+        const wrap = document.getElementById("wc-wrap");
+        const W = wrap.clientWidth || 900;
+        const H = wrap.clientHeight || 520;
+    
+        // --- Stable RNG for layout stability (less jumping) ---
+        // Mulberry32
+        function mulberry32(a) {{
+          return function() {{
+            var t = a += 0x6D2B79F5;
+            t = Math.imul(t ^ t >>> 15, t | 1);
+            t ^= t + Math.imul(t ^ t >>> 7, t | 61);
+            return ((t ^ t >>> 14) >>> 0) / 4294967296;
+          }}
+        }}
+        const rng = mulberry32(42);
+    
+        // --- Log scale for font sizes (3-5x gap) ---
+        const vals = data.map(d => d.value);
+        const vmin = Math.max(1, d3.min(vals));
+        const vmax = Math.max(1, d3.max(vals));
+    
+        const fontScale = d3.scaleLog()
+          .domain([vmin, vmax])
+          .range([28, 110])
+          .clamp(true);
+    
+        // --- Orientation: 70% horizontal, 30% vertical (-90) ---
+        function rotateFn() {{
+          return (rng() < 0.70) ? 0 : -90;
+        }}
+    
+        // --- Modern/Vibrant color using golden ratio hue ---
+        const GOLDEN_RATIO = 0.61803398875;
+        let hue = 0.12; // seed
+    
+        function nextColor(prevHue) {{
+          hue = (hue + GOLDEN_RATIO) % 1.0;
+          let h = hue * 360;
+    
+          // If too close to previous hue, shift a bit
+          if (prevHue !== null) {{
+            const diff = Math.abs(h - prevHue);
+            if (diff < 22) h = (h + 35) % 360;
+          }}
+    
+          // Vibrant but not neon: HSL
+          return {{ color: `hsl(${h}, 85%, 52%)`, hue: h }};
+        }}
+    
+        // --- Build words (sorted desc so big ones placed first) ---
+        const words = data
+          .slice()
+          .sort((a,b) => d3.descending(a.value, b.value))
+          .map((d,i) => ({{
+            text: d.text,
+            value: d.value,
+            size: Math.round(fontScale(d.value)),
+            rotate: rotateFn(),
+            __key: d.text
+          }}));
+    
+        // --- SVG ---
+        const svg = d3.select("#wc-wrap").append("svg")
+          .attr("viewBox", `0 0 ${W} ${H}`);
+    
+        const g = svg.append("g")
+          .attr("transform", `translate(${W/2},${H/2})`);
+    
+        // --- Keep previous positions for smooth transitions ---
+        const prev = new Map(); // key -> {{x,y,rotate,size,color}}
+        // Try restore from sessionStorage
+        try {{
+          const saved = sessionStorage.getItem("wc_prev");
+          if (saved) {{
+            const obj = JSON.parse(saved);
+            Object.keys(obj).forEach(k => prev.set(k, obj[k]));
+          }}
+        }} catch(e) {{}}
+    
+        function savePrev(map) {{
+          try {{
+            const obj = {{}};
+            map.forEach((v,k)=> obj[k]=v);
+            sessionStorage.setItem("wc_prev", JSON.stringify(obj));
+          }} catch(e) {{}}
+        }}
+    
+        // --- Layout: spiral + collision detection is built-in ---
+        const layout = d3.layout.cloud()
+          .size([W, H])
+          .words(words)
+          .padding(6)                 // khoảng cách chữ thoáng
+          .spiral("archimedean")       // spiral
+          .rotate(d => d.rotate)
+          .font("Montserrat")
+          .fontSize(d => d.size)
+          .random(() => rng());
+    
+        layout.on("end", draw);
+        layout.start();
+    
+        function draw(placed) {{
+          // Rule center: top word must be at (0,0) after transform
+          // placed[0] is highest freq due to sorting.
+          const top = placed[0];
+          const dx = top ? -top.x : 0;
+          const dy = top ? -top.y : 0;
+    
+          placed.forEach(w => {{
+            w.x = w.x + dx;
+            w.y = w.y + dy;
+          }});
+    
+          // Assign colors with adjacency-avoid approximation (draw order)
+          let prevHue = null;
+          const colorMap = new Map();
+          placed.forEach((w,i) => {{
+            // keep previous color if exists (stability)
+            const p = prev.get(w.__key);
+            if (p && p.color) {{
+              colorMap.set(w.__key, p.color);
+              // approximate prevHue from stored
+              prevHue = p.hue ?? prevHue;
+            }} else {{
+              const c = nextColor(prevHue);
+              colorMap.set(w.__key, c);
+              prevHue = c.hue;
+            }}
+          }});
+    
+          // DATA JOIN
+          const sel = g.selectAll("text.word")
+            .data(placed, d => d.__key);
+    
+          // EXIT
+          sel.exit()
+            .transition().duration(400)
+            .style("opacity", 0)
+            .remove();
+    
+          // ENTER
+          const enter = sel.enter().append("text")
+            .attr("class", "word")
+            .attr("text-anchor", "middle")
+            .style("opacity", 0)
+            .style("transform-origin", "center")
+            .text(d => d.text);
+    
+          // MERGE
+          const merged = enter.merge(sel);
+    
+          merged.each(function(d) {{
+            const node = d3.select(this);
+            const p = prev.get(d.__key);
+    
+            // starting point for smoothness:
+            const x0 = p ? p.x : d.x;
+            const y0 = p ? p.y : d.y;
+            const r0 = p ? p.rotate : d.rotate;
+            const s0 = p ? p.size : 0;          // new words scale from 0
+            const c0 = p ? p.color : null;
+    
+            const c = colorMap.get(d.__key);
+            const col = c.color ? c.color : c;  // stored/new
+    
+            node
+              .attr("transform", `translate(${x0},${y0}) rotate(${r0})`)
+              .style("fill", col)
+              .style("font-size", `${s0}px`);
+          }});
+    
+          // TRANSITION (800ms, ease-out)
+          merged.transition()
+            .duration(800)
+            .ease(d3.easeCubicOut)
+            .style("opacity", 1)
+            .attr("transform", d => `translate(${d.x},${d.y}) rotate(${d.rotate})`)
+            .style("font-size", d => `${d.size}px`);
+    
+          // Update prev map
+          const nextPrev = new Map();
+          placed.forEach(d => {{
+            const c = colorMap.get(d.__key);
+            if (c && c.color) {{
+              nextPrev.set(d.__key, {{x:d.x, y:d.y, rotate:d.rotate, size:d.size, color:c, hue:c.hue}});
+            }} else {{
+              nextPrev.set(d.__key, {{x:d.x, y:d.y, rotate:d.rotate, size:d.size, color:c}});
+            }}
+          }});
+          savePrev(nextPrev);
+        }}
+      </script>
+    </body>
+    </html>
+    """
+    
+                        # Render component
+                        st.components.v1.html(comp_html, height=540, scrolling=False)
+    
+                        st.caption(
+                            f"👥 Lượt gửi: **{total_answers}** • 👤 Người tham gia (unique): **{total_people}** • 🧩 Cụm duy nhất: **{total_unique_phrases}**"
+                        )
+    
+                        # (Tuỳ chọn) bảng top để kiểm chứng tần suất theo số người
+                        topk = pd.DataFrame(items[:20], columns=["Từ/cụm (chuẩn hoá)", "Số người nhập"])
+                        st.dataframe(topk, use_container_width=True, hide_index=True)
     # ------------------------------------------
     # 2) POLL
     # ------------------------------------------
