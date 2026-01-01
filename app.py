@@ -551,8 +551,28 @@ def render_activity():
             df = load_data(cid, current_act_key)
             with st.container(border=True):
                 if not df.empty:
-                    text = " ".join(df["Nội dung"].astype(str))
-                    wc = WordCloud(width=900, height=420, background_color='white', colormap='ocean').generate(text)
+                   from collections import Counter
+
+# Giữ nguyên cụm từ/câu mà học viên nhập (không tách theo khoảng trắng)
+phrases = (
+    df["Nội dung"]
+    .astype(str)
+    .map(lambda x: x.strip())
+    .tolist()
+)
+
+# Đếm tần suất theo đúng "cụm" (ví dụ: "Gây nên hậu quả" được tính là 1 mục)
+freq = Counter([p for p in phrases if p])
+
+# Tạo wordcloud từ tần suất (key có thể chứa dấu cách => vẫn hiển thị nguyên cụm)
+wc = WordCloud(
+    width=800,
+    height=400,
+    background_color="white",
+    colormap="ocean",
+    collocations=False,   # tránh tự ghép cụm “lạ”
+    prefer_horizontal=0.95
+).generate_from_frequencies(freq)
                     fig, ax = plt.subplots()
                     ax.imshow(wc, interpolation='bilinear')
                     ax.axis("off")
