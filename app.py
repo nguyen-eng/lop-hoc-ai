@@ -512,17 +512,19 @@ def render_activity():
 
     current_act_key = act
 
-    # ------------------------------------------
-    # 1) WORD CLOUD (GIỮ NGUYÊN CỤM TỪ)
+# ------------------------------------------
+    # 1) WORD CLOUD (ĐÃ SỬA LẠI CHUẨN MENTIMETER)
     # ------------------------------------------
     if act == "wordcloud":
         c1, c2 = st.columns([1, 2])
+        
+        # --- CỘT TRÁI: NHẬP LIỆU ---
         with c1:
             st.info(f"Câu hỏi: **{cfg['question']}**")
             if st.session_state["role"] == "student":
                 with st.form("f_wc"):
                     n = st.text_input("Tên")
-                    txt = st.text_input("Nhập 1 từ khóa / cụm từ (giữ nguyên, có thể có khoảng trắng)")
+                    txt = st.text_input("Nhập 1 từ khóa / cụm từ (giữ nguyên cụm)")
                     if st.form_submit_button("GỬI"):
                         if n.strip() and txt.strip():
                             save_data(cid, current_act_key, n, txt)
@@ -533,186 +535,73 @@ def render_activity():
                             st.warning("Vui lòng nhập đủ Tên và Từ khóa.")
             else:
                 st.warning("Giảng viên xem kết quả bên phải.")
+        
+        # --- CỘT PHẢI: HIỂN THỊ KẾT QUẢ ---
         with c2:
             st.markdown("##### ☁️ KẾT QUẢ")
             df = load_data(cid, current_act_key)
-            # ===== Mentimeter-like WordCloud (size strictly by frequency) =====
-            from PIL import Image, ImageDraw, ImageFont
-            import math
-            import random
-
-            def _pick_font_path():
-                # ưu tiên Montserrat trong repo; fallback DejaVuSans
-                try:
-                    from pathlib import Path
-                    candidate = Path("assets/fonts/Montserrat-SemiBold.ttf")
-                    if candidate.exists():
-                        return str(candidate)
-                except:
-                    pass
-                try:
-                    import matplotlib
-                    from pathlib import Path
-                    return str(Path(matplotlib.get_data_path()) / "fonts/ttf/DejaVuSans.ttf")
-                except:
-                    return None
-
-            def _menti_color(word: str) -> str:
-                menti_palette = [
-                    "#00BFA5",  # teal
-                    "#2E7DFF",  # blue
-                    "#7C4DFF",  # purple
-                    "#FF4D8D",  # pink
-                    "#FFB300",  # amber
-                    "#00C853",  # green
-                    "#FF6D00",  # orange
-                ]
-                return menti_palette[abs(hash(word)) % len(menti_palette)]
-
-            def _scale_font_sizes(freq_dict, min_size=22, max_size=120):
-                # Mentimeter-like: size chỉ phụ thuộc frequency
-                items = list(freq_dict.items())
-                if not items:
-                    return {}
-
-                freqs = [f for _, f in items]
-                fmin, fmax = min(freqs), max(freqs)
-
-                # Nếu tất cả cùng tần suất -> mọi từ cùng size (không to nhỏ “vô lý”)
-                if fmin == fmax:
-                    return {w: 52 for w, _ in items}
-
-                # Log scale cho nhìn “đúng cảm giác Mentimeter”
-                out = {}
-                log_min = math.log(fmin)
-                log_max = math.log(fmax)
-                for w, f in items:
-                    t = (math.log(f) - log_min) / (log_max - log_min + 1e-9)
-                    out[w] = int(min_size + t * (max_size - min_size))
-                return out
-
-            def render_menti_cloud(freq_dict, width=1200, height=650, top_n=70):
-                # Giới hạn số cụm để bố cục thoáng (Mentimeter thường không nhồi quá dày)
-                items = sorted(freq_dict.items(), key=lambda x: x[1], reverse=True)[:top_n]
-                freq_dict = dict(items)
-
-                font_path = _pick_font_path()
-
-                # precompute sizes
-                sizes = _scale_font_sizes(freq_dict, min_size=22, max_size=120)
-
-                # canvas
-                img = Image.new("RGBA", (width, height), (255, 255, 255, 255))
-                draw = ImageDraw.Draw(img)
-
-                # collision rectangles
-                placed = []
-
-                def intersects(r1, r2):
-                    return not (r1[2] < r2[0] or r1[0] > r2[2] or r1[3] < r2[1] or r1[1] > r2[3])
-
-                def spiral_positions(cx, cy, step=6, turns=2600):
-                    # spiral outwards
-                    a = 0.0
-                    r = 0.0
-                    for _ in range(turns):
-                        x = int(cx + r * math.cos(a))
-                        y = int(cy + r * math.sin(a))
-                        yield x, y
-                        a += 0.35
-                        r += step * 0.03
-
-                # deterministic layout like Mentimeter (ổn định giữa các lần rerun)
-                rnd = random.Random(42)
-
-                # place bigger words first
-                words_sorted = sorted(freq_dict.items(), key=lambda x: (x[1], len(x[0])), reverse=True)
-
-                for word, f in words_sorted:
-                    fs = sizes.get(word, 40)
-
-                    # mostly horizontal like Mentimeter
-                    rotate = 0 if rnd.random() < 0.88 else 90
-
-                    try:
-                        font = ImageFont.truetype(font_path, fs) if font_path else ImageFont.load_default()
-                    except:
-                        font = ImageFont.load_default()
-
-                    # measure text box
-                    bbox = draw.textbbox((0, 0), word, font=font)
-                    w = bbox[2] - bbox[0]
-                    h = bbox[3] - bbox[1]
-                    if rotate == 90:
-                        w, h = h, w
-
-                    cx, cy = width // 2, height // 2
-                    placed_ok = False
-
-                    for (x, y) in spiral_positions(cx, cy):
-                        x0 = x - w // 2
-                        y0 = y - h // 2
-                        x1 = x0 + w
-                        y1 = y0 + h
-
-                        # inside margins
-                        if x0 < 18 or y0 < 18 or x1 > width - 18 or y1 > height - 18:
-                            continue
-
-                        rect = (x0, y0, x1, y1)
-                        if any(intersects(rect, pr) for pr in placed):
-                            continue
-
-                        # draw
-                        color = _menti_color(word)
-                        if rotate == 0:
-                            draw.text((x0, y0), word, font=font, fill=color)
-                        else:
-                            tmp = Image.new("RGBA", (w, h), (255, 255, 255, 0))
-                            d2 = ImageDraw.Draw(tmp)
-                            d2.text((0, 0), word, font=font, fill=color)
-                            tmp = tmp.rotate(90, expand=True)
-                            img.alpha_composite(tmp, (x0, y0))
-
-                        placed.append(rect)
-                        placed_ok = True
-                        break
-
-                    # nếu không đặt được (quá chật) thì bỏ qua từ nhỏ nhất ở cuối (Mentimeter cũng “lọc” ngầm)
-                    if not placed_ok:
-                        continue
-
-                return img
-
+            
             with st.container(border=True):
                 if df.empty:
                     st.info("Chưa có dữ liệu. Mời lớp nhập từ khóa.")
                 else:
-                    # 1) Chuẩn hóa input: giữ nguyên cụm từ, gộp nhiều space, bỏ rỗng
-                    phrases = (
-                        df["Nội dung"]
-                        .astype(str)
-                        .map(lambda x: " ".join(x.strip().split()))
-                        .tolist()
+                    # 1. XỬ LÝ DỮ LIỆU (Giữ nguyên cụm từ)
+                    # Lấy list nội dung, loại bỏ dòng trống
+                    text_data = df["Nội dung"].dropna().astype(str).tolist()
+                    # Chuẩn hóa: cắt khoảng trắng thừa (giữ nguyên hoa/thường để tôn trọng người nhập)
+                    clean_text = [t.strip() for t in text_data if t.strip()]
+                    
+                    # Đếm tần suất (quan trọng: đếm theo cụm phrase)
+                    freq_dict = Counter(clean_text)
+
+                    # 2. HÀM MÀU SẮC MENTIMETER
+                    def menti_color_func(word, font_size, position, orientation, random_state=None, **kwargs):
+                        # Bảng màu: Teal, Blue, Purple, Pink, Orange, Green
+                        colors = ["#00a0b0", "#cc333f", "#eb6841", "#edc951", "#6a4a3c", "#3e9fa8", "#e94e77"]
+                        return random.choice(colors)
+
+                    # 3. CẤU HÌNH WORDCLOUD
+                    # Cố gắng load font đẹp (Montserrat), nếu không có thì dùng mặc định
+                    font_path_use = None
+                    # Kiểm tra các đường dẫn font có thể có
+                    possible_fonts = [
+                        "assets/fonts/Montserrat-Bold.ttf", 
+                        "assets/fonts/Montserrat-SemiBold.ttf",
+                        "arial.ttf",
+                        "Roboto-Bold.ttf"
+                    ]
+                    for f in possible_fonts:
+                        if os.path.exists(f):
+                            font_path_use = f
+                            break
+                    
+                    wc = WordCloud(
+                        font_path=font_path_use,      # Dùng font tìm thấy (hoặc None)
+                        width=1200, 
+                        height=650,
+                        background_color="white",     # Nền trắng sạch
+                        max_words=100,                # Số từ tối đa
+                        prefer_horizontal=1.0,        # 100% nằm ngang (Giống Mentimeter)
+                        relative_scaling=0.5,         # Tỷ lệ kích thước chữ theo tần suất (0.5 là cân đối)
+                        min_font_size=14,             
+                        color_func=menti_color_func,  # Áp dụng bảng màu
+                        collocations=False,           # Tắt chế độ tự tách từ (để giữ cụm "An ninh mạng")
+                        margin=5                      # Khoảng cách giữa các chữ
                     )
-                    phrases = [p for p in phrases if p]
 
-                    # 2) Tần suất theo số lượt trùng (đúng bản chất Mentimeter)
-                    freq = Counter(phrases)
+                    # Tạo wordcloud từ dict tần suất
+                    wc.generate_from_frequencies(freq_dict)
 
-                    # 3) Render cloud “neo size theo freq”
-                    img = render_menti_cloud(freq, width=1200, height=650, top_n=70)
+                    # 4. HIỂN THỊ BẰNG MATPLOTLIB (Sắc nét hơn PIL thủ công)
+                    fig, ax = plt.subplots(figsize=(10, 6))
+                    ax.imshow(wc, interpolation="bilinear") # Bilinear làm mượt mép chữ
+                    ax.axis("off")
+                    plt.tight_layout(pad=0)
+                    
+                    st.pyplot(fig)
 
-                    buf = BytesIO()
-                    img.save(buf, format="PNG", optimize=True)
-                    st.image(buf.getvalue(), use_container_width=True)
-
-                    # 4) Footer kiểu Mentimeter
-                    total = len(phrases)
-                    uniq = len(freq)
-                    st.caption(f"👥 Lượt trả lời: **{total}**  •  🧩 Số cụm từ duy nhất: **{uniq}**")
-
-
+                    # Thống kê nhỏ bên dưới
+                    st.caption(f"👥 Lượt trả lời: **{len(text_data)}** • 🧩 Số cụm từ duy nhất: **{len(freq_dict)}**")
     # ------------------------------------------
     # 2) POLL
     # ------------------------------------------
