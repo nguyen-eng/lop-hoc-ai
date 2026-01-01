@@ -602,9 +602,9 @@ def render_activity():
             tcol1, tcol2, tcol3 = st.columns([2, 2, 2])
             with tcol1:
                 live = st.toggle("🔴 Live update (1.5s)", value=True, key="wc_live_toggle")
-            with tcol2:
+           with tcol2:
                 if st.button("🖥 Fullscreen Wordcloud", key="wc_btn_full"):
-                    st.session_state["wc_fullscreen"] = True
+                    st.experimental_set_query_params(wcfs="1")
                     st.rerun()
             with tcol3:
                 show_table = st.toggle("Hiện bảng Top từ", value=False, key="wc_show_table")
@@ -884,20 +884,48 @@ def render_activity():
                 topk = pd.DataFrame(items[:20], columns=["Từ/cụm (chuẩn hoá)", "Số người nhập"])
                 st.dataframe(topk, use_container_width=True, hide_index=True)
 
-            # ✅ Fullscreen overlay (phóng to ĐÚNG đám mây từ)
-            if st.session_state.get("wc_fullscreen", False):
-                if not freq:
-                    st.info("Chưa có dữ liệu. Mời lớp nhập từ khóa.")
-                    if st.button("ĐÓNG FULLSCREEN", key="wc_close_full_empty"):
-                        st.session_state["wc_fullscreen"] = False
-                        st.rerun()
-                else:
-                    MAX_WORDS_SHOW = 120
-                    items_fs = sorted(freq.items(), key=lambda x: x[1], reverse=True)[:MAX_WORDS_SHOW]
-                    words_payload_fs = [{"text": k, "value": int(v)} for k, v in items_fs]
-                    words_json_fs = json.dumps(words_payload_fs, ensure_ascii=False)
-            
-                    wc_html_fs = build_wordcloud_html(words_json_fs, height_px=720)
+# ✅ Fullscreen mode bằng query param (không dùng st.modal/st.dialog)
+q = st.experimental_get_query_params()
+is_fs = q.get("wcfs", ["0"])[0] == "1"
+
+if is_fs:
+    # Ẩn phần thừa, kéo full bề ngang, sát mép
+    st.markdown("""
+    <style>
+      header, footer {visibility:hidden;}
+      [data-testid="stSidebar"] {display:none;}
+      .block-container {max-width: 100% !important; padding: 0.6rem 0.8rem !important;}
+    </style>
+    """, unsafe_allow_html=True)
+
+    # Live refresh ngay trong fullscreen (nếu bật)
+    if live and st_autorefresh is not None:
+        st_autorefresh(interval=1500, key="wc_live_refresh_fs")
+
+    # Thanh điều khiển fullscreen
+    bar1, bar2, bar3 = st.columns([2, 6, 2])
+    with bar1:
+        if st.button("⬅️ Thoát Fullscreen", key="wc_exit_fs"):
+            st.experimental_set_query_params()  # clear params
+            st.rerun()
+    with bar3:
+        st.caption("Tỷ lệ hiển thị 16:9")
+
+    # Vẽ wordcloud phóng to 16:9 (fit theo viewport)
+    if not freq:
+        st.info("Chưa có dữ liệu. Mời lớp nhập từ khóa.")
+    else:
+        MAX_WORDS_SHOW = 140
+        items_fs = sorted(freq.items(), key=lambda x: x[1], reverse=True)[:MAX_WORDS_SHOW]
+        words_payload_fs = [{"text": k, "value": int(v)} for k, v in items_fs]
+        words_json_fs = json.dumps(words_payload_fs, ensure_ascii=False)
+
+        # 16:9: height≈56.25% width. Ta set khung lớn + fit theo màn hình.
+        wc_html_fs = build_wordcloud_html(words_json_fs, height_px=820)
+        st.components.v1.html(wc_html_fs, height=860, scrolling=False)
+
+    # Khi fullscreen thì không cần render các phần phía dưới nữa
+    return
             
                     # ✅ mở fullscreen bằng dialog tương thích phiên bản streamlit
                     open_wc_fullscreen_dialog(wc_html_fs, live)
