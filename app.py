@@ -32,68 +32,92 @@ TEXT_COLOR = "#111827"
 st.markdown(f"""
 <style>
     @import url('https://fonts.googleapis.com/css2?family=Montserrat:wght@400;500;600;700;800&display=swap');
+
     html, body, [class*="css"] {{
         font-family: 'Montserrat', sans-serif;
         background-color: {BG_COLOR};
         color: {TEXT_COLOR};
     }}
+
     header {{visibility: hidden;}} footer {{visibility: hidden;}}
 
+    /* LOGIN BOX */
     .login-box {{
         background: white; padding: 40px; border-radius: 20px;
         box-shadow: 0 10px 40px rgba(0,0,0,0.1); text-align: center;
         max-width: 600px; margin: 0 auto; border-top: 6px solid {PRIMARY_COLOR};
     }}
 
+    /* VIZ CARD */
     .viz-card {{
         background: white; padding: 25px; border-radius: 16px;
         box-shadow: 0 4px 20px rgba(0,0,0,0.05);
         margin-bottom: 20px; border: 1px solid #e2e8f0;
     }}
 
+    /* INPUT */
     .stTextInput input, .stTextArea textarea {{
         border: 2px solid #e2e8f0; border-radius: 12px; padding: 12px;
     }}
 
+    /* BUTTONS */
     div.stButton > button {{
         background-color: {PRIMARY_COLOR}; color: white; border: none;
-        border-radius: 12px; padding: 12px 16px; font-weight: 700;
-        width: 100%;
-        box-shadow: 0 4px 15px rgba(0, 106, 78, 0.25);
+        border-radius: 50px; padding: 12px 24px; font-weight: 700;
+        text-transform: uppercase; letter-spacing: 1px; width: 100%;
+        box-shadow: 0 4px 15px rgba(0, 106, 78, 0.3);
     }}
-    div.stButton > button:hover {{ background-color: #00503a; transform: translateY(-1px); }}
+    div.stButton > button:hover {{ background-color: #00503a; transform: translateY(-2px); }}
 
+    /* NOTE CARD */
     .note-card {{
         background: #fff; padding: 15px; border-radius: 12px;
         border-left: 5px solid {PRIMARY_COLOR}; margin-bottom: 12px;
         box-shadow: 0 2px 8px rgba(0,0,0,0.08); font-size: 15px;
     }}
 
-    /* Gradescope-like list row */
-    .gs-row {{
-        background: #ffffff;
+    /* SIDEBAR */
+    [data-testid="stSidebar"] {{ background-color: #111827; }}
+    [data-testid="stSidebar"] * {{ color: #ffffff; }}
+
+    /* ===== NEW: Gradescope-like activity list ===== */
+    .page-title {{
+        font-size: 30px; font-weight: 800; margin: 0 0 6px 0;
+        display:flex; align-items:center; gap:10px;
+    }}
+    .subtle {{
+        color: #64748b; font-weight: 600; margin-top: 2px;
+    }}
+    .activity-row {{
+        background: white;
         border: 1px solid #e2e8f0;
         border-radius: 14px;
-        padding: 14px 16px;
-        margin-bottom: 10px;
-        box-shadow: 0 2px 10px rgba(0,0,0,0.04);
+        padding: 16px 18px;
+        box-shadow: 0 6px 16px rgba(0,0,0,0.03);
+        margin-bottom: 14px;
     }}
-    .gs-title {{
+    .activity-title {{
         font-weight: 800;
-        color: #0f172a;
-        font-size: 16px;
         margin: 0;
-        padding: 0;
+        font-size: 16px;
+        color: #0f172a;
     }}
-    .gs-sub {{
+    .activity-meta {{
+        margin: 6px 0 0 0;
         color: #64748b;
         font-weight: 600;
         font-size: 13px;
-        margin-top: 6px;
     }}
-
-    [data-testid="stSidebar"] {{ background-color: #111827; }}
-    [data-testid="stSidebar"] * {{ color: #ffffff; }}
+    .pill {{
+        display:inline-block;
+        padding: 4px 10px;
+        border-radius: 999px;
+        background: #f1f5f9;
+        color: #0f172a;
+        font-weight: 700;
+        font-size: 12px;
+        margin-right: 8px;
+    }}
 </style>
 """, unsafe_allow_html=True)
 
@@ -107,206 +131,7 @@ except:
     model = None
 
 # ==========================================
-# 1.5. “NGÂN HÀNG HOẠT ĐỘNG” THEO TỪNG LỚP (Mentimeter-like)
-# - Giữ nguyên 6 loại hoạt động có sẵn
-# - Chỉ thay “câu hỏi/đáp án/tiêu chí/options/items” theo lớp
-# ==========================================
-CLASS_BANK = {
-    # LỚP 1-2: Nguyên nhân – Kết quả (phân biệt nguyên cớ, điều kiện)
-    "lop1": {
-        "topic": "Cặp phạm trù Nguyên nhân – Kết quả (phân biệt nguyên cớ, điều kiện)",
-        "wordcloud": {"title": "Word Cloud: Từ khóa phân biệt", "q": "Nhập 1 từ khóa giúp phân biệt *nguyên nhân* với *nguyên cớ/điều kiện*."},
-        "poll": {"title": "Poll: Chọn đúng bản chất", "q": "Trong các phát biểu sau, đâu là mô tả đúng nhất về *nguyên nhân*?", "options": [
-            "A. Hiện tượng có trước kết quả và có liên hệ ngẫu nhiên bên ngoài",
-            "B. Nhân tố sinh ra kết quả, quyết định sự xuất hiện của kết quả",
-            "C. Hoàn cảnh đi kèm, tạo môi trường cho kết quả nhưng không sinh ra kết quả",
-            "D. Lý do được nêu ra để biện minh hành vi sau khi kết quả đã xảy ra"
-        ], "answer_key": "B"},
-        "openended": {"title": "Open Ended: Tình huống vụ việc", "q": "Hãy nêu *một tình huống* trong công tác/đời sống và chỉ rõ: đâu là **nguyên nhân**, đâu là **nguyên cớ**, đâu là **điều kiện**."},
-        "scales": {"title": "Scales: Tự đánh giá năng lực phân biệt", "q": "Tự đánh giá mức độ vững chắc (1 thấp – 5 cao).", "criteria": [
-            "Nhận diện nguyên nhân", "Phân biệt nguyên cớ", "Phân biệt điều kiện", "Lập luận chứng minh"
-        ]},
-        "ranking": {"title": "Ranking: Ưu tiên khi phân tích vụ việc", "q": "Sắp xếp thứ tự ưu tiên khi phân tích một vụ việc.", "items": [
-            "Xác định kết quả/hậu quả", "Truy nguyên nguyên nhân quyết định", "Tách nguyên cớ ngẫu nhiên", "Kiểm tra điều kiện đi kèm"
-        ]},
-        "pin": {"title": "Pin: Điểm nóng tình huống", "q": "Ghim vị trí minh họa nơi *dễ phát sinh nguyên cớ (xung đột)* trong tình huống thầy đang giảng.", "image": MAP_IMAGE},
-    },
-    "lop2": {
-        "topic": "Cặp phạm trù Nguyên nhân – Kết quả (kỹ năng lập luận & phản biện)",
-        "wordcloud": {"title": "Word Cloud: Từ khóa ‘động lực’", "q": "Nhập 1 từ khóa mô tả ‘động lực bên trong’ của sự việc (nguyên nhân)."},
-        "poll": {"title": "Poll: Nhận diện nguyên cớ", "q": "Sự kiện Vịnh Bắc Bộ (1964) trong lập luận lịch sử thường được xem là gì?", "options": [
-            "A. Nguyên nhân trực tiếp tất yếu", "B. Nguyên nhân sâu xa quyết định",
-            "C. Nguyên cớ để hợp thức hóa hành động", "D. Điều kiện đủ duy nhất"
-        ], "answer_key": "C"},
-        "openended": {"title": "Open Ended: Phản bác ngộ nhận", "q": "Nêu một *ngộ nhận phổ biến* khi phân tích nguyên nhân–kết quả và cách thầy/cô sẽ phản bác."},
-        "scales": {"title": "Scales: Chuẩn hóa tư duy điều tra", "q": "Tự đánh giá mức độ vận dụng được vào tư duy điều tra/nhận định vụ việc.", "criteria": [
-            "Bám chứng cứ", "Tránh võ đoán", "Chuỗi nhân quả", "Loại nhiễu nguyên cớ"
-        ]},
-        "ranking": {"title": "Ranking: 4 bước lập luận", "q": "Xếp hạng 4 bước lập luận nhân quả.", "items": [
-            "Mô tả kết quả", "Liệt kê yếu tố liên quan", "Chứng minh yếu tố sinh ra kết quả", "Kết luận nguyên nhân quyết định"
-        ]},
-        "pin": {"title": "Pin: Bản đồ nhân quả", "q": "Ghim nơi *bắt đầu* của chuỗi sự kiện theo phân tích của bạn.", "image": MAP_IMAGE},
-    },
-
-    # LỚP 3-4: Quy luật phủ định của phủ định
-    "lop3": {
-        "topic": "Quy luật Phủ định của phủ định (đường xoáy ốc, tính kế thừa)",
-        "wordcloud": {"title": "Word Cloud: Từ khóa ‘kế thừa’", "q": "Nhập 1 từ khóa thể hiện đúng tinh thần *kế thừa biện chứng*."},
-        "poll": {"title": "Poll: Hiểu đúng ‘hai lần phủ định’", "q": "Vì sao thường nói phát triển cần *ít nhất hai lần phủ định*?", "options": [
-            "A. Vì phải quay lại y nguyên cái cũ",
-            "B. Vì một lần phủ định chưa đủ hình thành chất mới ổn định",
-            "C. Vì phủ định luôn do ý chí chủ quan áp đặt",
-            "D. Vì mọi sự vật đều phát triển theo đường thẳng"
-        ], "answer_key": "B"},
-        "openended": {"title": "Open Ended: Ví dụ thực tiễn", "q": "Hãy đưa 1 ví dụ trong học tập/công tác thể hiện ‘phủ định của phủ định’ theo đường xoáy ốc."},
-        "scales": {"title": "Scales: Năng lực giải thích quy luật", "q": "Tự đánh giá mức độ nắm vững.", "criteria": [
-            "Phủ định biện chứng", "Tính kế thừa", "Đường xoáy ốc", "Tránh ‘a→-a→a’ máy móc"
-        ]},
-        "ranking": {"title": "Ranking: Trụ cột lập luận", "q": "Sắp xếp trụ cột lập luận khi giảng quy luật.", "items": [
-            "Mâu thuẫn nội tại", "Phủ định biện chứng", "Kế thừa", "Trình độ phát triển cao hơn"
-        ]},
-        "pin": {"title": "Pin: Điểm ‘bẻ gãy’ tư duy", "q": "Ghim vị trí tượng trưng ‘điểm bẻ gãy’ nơi cái cũ bị phủ định trong ví dụ của bạn.", "image": MAP_IMAGE},
-    },
-    "lop4": {
-        "topic": "Quy luật Phủ định của phủ định (phản biện Popper & tính kiểm chứng)",
-        "wordcloud": {"title": "Word Cloud: Từ khóa ‘khả kiểm’", "q": "Nhập 1 từ khóa về *chuẩn mực lập luận* khi phản biện ‘phi khả kiểm’."},
-        "poll": {"title": "Poll: Phản biện lập luận ‘mơ hồ’", "q": "Cách phản biện mạnh nhất trước phê phán ‘quy luật mơ hồ’ là gì?", "options": [
-            "A. Kể thật nhiều ví dụ",
-            "B. Chỉ dựa vào uy tín kinh điển",
-            "C. Nêu điều kiện áp dụng + tiêu chí nhận diện phủ định biện chứng",
-            "D. Bỏ qua phê phán vì ‘thù địch’"
-        ], "answer_key": "C"},
-        "openended": {"title": "Open Ended: Một tiêu chí nhận diện", "q": "Hãy đề xuất 1–2 **tiêu chí** giúp phân biệt ‘phủ định biện chứng’ với ‘phủ định siêu hình’."},
-        "scales": {"title": "Scales: Mức độ lập luận", "q": "Tự đánh giá khả năng lập luận trước phản biện.", "criteria": [
-            "Đặt điều kiện áp dụng", "Chỉ ra cơ chế nội tại", "Phân biệt ví dụ minh họa", "Kết luận có giới hạn"
-        ]},
-        "ranking": {"title": "Ranking: Cấu trúc trả lời phản biện", "q": "Sắp xếp cấu trúc trả lời phản biện.", "items": [
-            "Làm rõ phạm vi", "Nêu tiêu chí", "Áp vào ví dụ", "Kết luận & giới hạn"
-        ]},
-        "pin": {"title": "Pin: Điểm tranh luận", "q": "Ghim vị trí tượng trưng ‘điểm bị hiểu sai’ mà bạn muốn giải thích.", "image": MAP_IMAGE},
-    },
-
-    # LỚP 5-6: Triết học về con người (bản chất, tha hóa, giải phóng)
-    "lop5": {
-        "topic": "Triết học về con người: Quan niệm & bản chất con người (Mác)",
-        "wordcloud": {"title": "Word Cloud: ‘Bản chất’ là gì?", "q": "Nhập 1 từ khóa mô tả ‘bản chất con người’ theo Mác."},
-        "poll": {"title": "Poll: Luận điểm trung tâm", "q": "Theo Mác, bản chất con người trước hết là gì?", "options": [
-            "A. Một thuộc tính sinh học bất biến",
-            "B. Một tinh thần siêu nghiệm có sẵn",
-            "C. Tổng hòa những quan hệ xã hội",
-            "D. Một ‘bản tính thiện/ác’ cố định"
-        ], "answer_key": "C"},
-        "openended": {"title": "Open Ended: Vận dụng vào môi trường CAND", "q": "Theo bạn, ‘tổng hòa quan hệ xã hội’ gợi ra điều gì khi rèn luyện phẩm chất người cán bộ?" },
-        "scales": {"title": "Scales: Hiểu 4 tầng bản chất", "q": "Tự đánh giá mức độ hiểu.", "criteria": [
-            "Sinh học–tự nhiên", "Xã hội–lịch sử", "Thực tiễn–lao động", "Tự ý thức–giá trị"
-        ]},
-        "ranking": {"title": "Ranking: Cái gì quyết định ‘tính người’?", "q": "Xếp hạng yếu tố quyết định ‘tính người’ trong phân tích của bạn.", "items": [
-            "Quan hệ xã hội", "Hoạt động thực tiễn", "Giá trị–đạo đức", "Năng lực nhận thức"
-        ]},
-        "pin": {"title": "Pin: Không gian ‘quan hệ xã hội’", "q": "Ghim nơi biểu tượng cho ‘mạng lưới quan hệ’ chi phối sự hình thành nhân cách.", "image": MAP_IMAGE},
-    },
-    "lop6": {
-        "topic": "Triết học về con người: Tha hóa trong lao động & giải phóng con người",
-        "wordcloud": {"title": "Word Cloud: Từ khóa ‘tha hóa’", "q": "Nhập 1 từ khóa mô tả hiện tượng tha hóa."},
-        "poll": {"title": "Poll: Dấu hiệu tha hóa", "q": "Dấu hiệu cốt lõi của lao động bị tha hóa là gì?", "options": [
-            "A. Người lao động làm việc ít đi",
-            "B. Sản phẩm/quá trình lao động quay lại thống trị người lao động",
-            "C. Lao động luôn tạo hạnh phúc trực tiếp",
-            "D. Lao động chỉ là hoạt động bản năng"
-        ], "answer_key": "B"},
-        "openended": {"title": "Open Ended: Một cơ chế giải phóng", "q": "Theo bạn, điều kiện/cơ chế nào giúp ‘giải phóng con người’ theo tinh thần Mác?" },
-        "scales": {"title": "Scales: Nhận diện 4 dạng tha hóa", "q": "Tự đánh giá mức độ phân biệt.", "criteria": [
-            "Tha hóa khỏi sản phẩm", "Tha hóa khỏi hoạt động", "Tha hóa khỏi ‘loài tính’", "Tha hóa khỏi người khác"
-        ]},
-        "ranking": {"title": "Ranking: Ưu tiên can thiệp", "q": "Xếp hạng ưu tiên can thiệp để giảm ‘tha hóa’ trong tổ chức.", "items": [
-            "Mục tiêu/ý nghĩa công việc", "Cơ chế ghi nhận–đãi ngộ", "Tổ chức lao động hợp lý", "Văn hóa tổ chức"
-        ]},
-        "pin": {"title": "Pin: Điểm ‘đứt gãy ý nghĩa’", "q": "Ghim điểm minh họa nơi ‘ý nghĩa công việc’ bị đứt gãy dẫn tới tha hóa.", "image": MAP_IMAGE},
-    },
-
-    # LỚP 7-8: Cá nhân – xã hội, vấn đề con người ở Việt Nam
-    "lop7": {
-        "topic": "Triết học về con người: Quan hệ cá nhân – xã hội",
-        "wordcloud": {"title": "Word Cloud: Từ khóa ‘cộng đồng’", "q": "Nhập 1 từ khóa mô tả quan hệ cá nhân–xã hội."},
-        "poll": {"title": "Poll: Quan điểm đúng", "q": "Quan điểm nào đúng nhất theo duy vật lịch sử?", "options": [
-            "A. Xã hội chỉ là tổng cộng cơ học các cá nhân",
-            "B. Cá nhân chỉ là ‘hạt bụi’ không vai trò",
-            "C. Cá nhân là chủ thể lịch sử trong những điều kiện xã hội nhất định",
-            "D. Cá nhân tách khỏi xã hội vẫn phát triển đầy đủ"
-        ], "answer_key": "C"},
-        "openended": {"title": "Open Ended: Xung đột cá nhân–tập thể", "q": "Nêu 1 xung đột cá nhân–tập thể trong học tập/tổ chức và cách giải theo tinh thần biện chứng."},
-        "scales": {"title": "Scales: Năng lực hài hòa", "q": "Tự đánh giá năng lực hài hòa cá nhân–tập thể.", "criteria": [
-            "Tự chủ", "Kỷ luật", "Tinh thần cộng đồng", "Trách nhiệm xã hội"
-        ]},
-        "ranking": {"title": "Ranking: Trật tự ưu tiên", "q": "Xếp hạng các nguyên tắc khi xử lý mối quan hệ cá nhân–tập thể.", "items": [
-            "Mục tiêu chung", "Quy chế–kỷ luật", "Tôn trọng cá nhân", "Đối thoại–phản hồi"
-        ]},
-        "pin": {"title": "Pin: Nút thắt tổ chức", "q": "Ghim điểm tượng trưng ‘nút thắt’ trong quan hệ cá nhân–tập thể.", "image": MAP_IMAGE},
-    },
-    "lop8": {
-        "topic": "Triết học về con người: Vấn đề con người ở Việt Nam (bối cảnh mới)",
-        "wordcloud": {"title": "Word Cloud: Thách thức con người VN", "q": "Nhập 1 từ khóa về thách thức/phẩm chất con người Việt Nam hiện nay."},
-        "poll": {"title": "Poll: Ưu tiên phát triển", "q": "Ưu tiên nào là ‘đòn bẩy’ để phát triển con người ở Việt Nam?", "options": [
-            "A. Chỉ tăng trưởng kinh tế, không cần văn hóa",
-            "B. Phát triển toàn diện: trí tuệ–đạo đức–thể chất–thẩm mỹ",
-            "C. Chỉ kỷ luật, không cần sáng tạo",
-            "D. Chỉ công nghệ, không cần con người"
-        ], "answer_key": "B"},
-        "openended": {"title": "Open Ended: Một giải pháp cụ thể", "q": "Đề xuất 1 giải pháp cụ thể (cấp lớp/đơn vị/địa phương) để phát triển con người theo định hướng nhân văn."},
-        "scales": {"title": "Scales: ‘Phẩm chất công dân’", "q": "Tự đánh giá.", "criteria": [
-            "Tôn trọng pháp luật", "Tinh thần trách nhiệm", "Năng lực số", "Nhân ái–hợp tác"
-        ]},
-        "ranking": {"title": "Ranking: Hệ giá trị", "q": "Xếp hạng hệ giá trị ưu tiên của bạn.", "items": [
-            "Trung thực", "Kỷ luật", "Sáng tạo", "Phụng sự cộng đồng"
-        ]},
-        "pin": {"title": "Pin: Vấn đề theo vùng", "q": "Ghim khu vực bạn cho là cần ưu tiên chính sách ‘phát triển con người’ (minh họa).", "image": MAP_IMAGE},
-    },
-
-    # LỚP 9-10: Triết học Mác-xít nói chung
-    "lop9": {
-        "topic": "Triết học Mác-xít: Vật chất – Ý thức, phương pháp luận",
-        "wordcloud": {"title": "Word Cloud: Từ khóa ‘duy vật’", "q": "Nhập 1 từ khóa thể hiện lập trường duy vật biện chứng."},
-        "poll": {"title": "Poll: Nguyên tắc nghề ĐTV", "q": "Liên hệ nghề ĐTV: phát biểu nào đúng nhất?", "options": [
-            "A. Cảm nhận chủ quan quan trọng hơn chứng cứ",
-            "B. Ý thức có thể ‘tạo ra’ vật chất trực tiếp",
-            "C. Chứng cứ vật chất là nền tảng; ý thức định hướng cách thu thập–đánh giá",
-            "D. Không cần kiểm tra chéo vì đã ‘tin chắc’"
-        ], "answer_key": "C"},
-        "openended": {"title": "Open Ended: Một sai lầm duy tâm", "q": "Nêu 1 sai lầm duy tâm/siêu hình trong nhận định vụ việc và cách sửa."},
-        "scales": {"title": "Scales: Kỹ năng phương pháp luận", "q": "Tự đánh giá.", "criteria": [
-            "Tôn trọng khách quan", "Phân tích mâu thuẫn", "Tổng hợp hệ thống", "Kiểm chứng thực tiễn"
-        ]},
-        "ranking": {"title": "Ranking: Ưu tiên khi lập luận", "q": "Xếp hạng ưu tiên khi lập luận khoa học.", "items": [
-            "Dữ kiện–chứng cứ", "Khung lý luận", "Giả thuyết thay thế", "Kết luận có điều kiện"
-        ]},
-        "pin": {"title": "Pin: Điểm nóng ‘thông tin nhiễu’", "q": "Ghim điểm tượng trưng nơi dễ bị ‘thông tin nhiễu’ dẫn dắt nhận thức.", "image": MAP_IMAGE},
-    },
-    "lop10": {
-        "topic": "Triết học Mác-xít: Phép biện chứng (toàn diện, lịch sử–cụ thể)",
-        "wordcloud": {"title": "Word Cloud: Từ khóa ‘toàn diện’", "q": "Nhập 1 từ khóa về nguyên tắc toàn diện."},
-        "poll": {"title": "Poll: Lịch sử–cụ thể", "q": "Nguyên tắc lịch sử–cụ thể yêu cầu điều gì?", "options": [
-            "A. Dùng một công thức cho mọi tình huống",
-            "B. Xem xét đối tượng trong điều kiện lịch sử cụ thể của nó",
-            "C. Chỉ cần ý chí chính trị",
-            "D. Chỉ cần số liệu, không cần bối cảnh"
-        ], "answer_key": "B"},
-        "openended": {"title": "Open Ended: Một case áp dụng", "q": "Nêu 1 case trong quản lý/lãnh đạo mà nếu bỏ bối cảnh sẽ dẫn đến quyết định sai."},
-        "scales": {"title": "Scales: Năng lực biện chứng", "q": "Tự đánh giá.", "criteria": [
-            "Toàn diện", "Phát triển", "Lịch sử–cụ thể", "Thực tiễn"
-        ]},
-        "ranking": {"title": "Ranking: Chống ‘một chiều’", "q": "Xếp hạng cách chống tư duy một chiều.", "items": [
-            "Thu thập góc nhìn đối lập", "Kiểm chứng dữ liệu", "Xem điều kiện–bối cảnh", "Đặt giả thuyết thay thế"
-        ]},
-        "pin": {"title": "Pin: Điểm rủi ro quyết định", "q": "Ghim điểm tượng trưng ‘điểm rủi ro’ trong ra quyết định.", "image": MAP_IMAGE},
-    },
-}
-
-def get_class_cfg(class_id: str):
-    # fallback an toàn
-    return CLASS_BANK.get(class_id, CLASS_BANK["lop1"])
-
-# ==========================================
-# 2. XỬ LÝ DỮ LIỆU (BACKEND) - GIỮ NGUYÊN
+# 2. XỬ LÝ DỮ LIỆU (BACKEND)
 # ==========================================
 data_lock = threading.Lock()
 CLASSES = {f"Lớp học {i}": f"lop{i}" for i in range(1, 11)}
@@ -347,7 +172,255 @@ def clear_activity(cls, act):
             os.remove(path)
 
 # ==========================================
-# 3. MÀN HÌNH ĐĂNG NHẬP - GIỮ NGUYÊN
+# 2.1. NEW: CẤU HÌNH NỘI DUNG THEO LỚP (Mentimeter-like)
+# ==========================================
+def _topic_for_class(cid: str) -> str:
+    n = int(cid.replace("lop", ""))
+    if n in [1, 2]:
+        return "Cặp phạm trù Nguyên nhân – Kết quả (và phân biệt nguyên cớ, điều kiện)"
+    if n in [3, 4]:
+        return "Quy luật Phủ định của phủ định (đường xoáy ốc phát triển)"
+    if n in [5, 6]:
+        return "Triết học về con người: quan niệm – bản chất; tha hóa trong lao động; giải phóng con người"
+    if n in [7, 8]:
+        return "Triết học về con người: quan hệ cá nhân – xã hội; vấn đề con người ở Việt Nam"
+    return "Triết học Mác-xít (tổng quan: thế giới quan, phương pháp luận, các quy luật/cặp phạm trù)"
+
+def class_content(cid: str) -> dict:
+    topic = _topic_for_class(cid)
+    n = int(cid.replace("lop", ""))
+
+    # --- DEFAULTS (sẽ override theo nhóm lớp) ---
+    content = {
+        "topic": topic,
+        "wordcloud": {
+            "title": "Từ khóa phân biệt",
+            "question": "Hãy nêu 01 từ khóa then chốt của chủ đề hôm nay.",
+            "hint": "Ví dụ: 'tất yếu', 'kế thừa', 'tha hóa', 'giải phóng', ...",
+        },
+        "poll": {
+            "title": "Chọn đúng bản chất",
+            "question": "Theo bạn, phát biểu nào đúng nhất?",
+            "options": ["Phương án A", "Phương án B", "Phương án C", "Phương án D"],
+            "correct": None,  # có thể đặt đáp án đúng (A/B/C/D) để GV xem
+            "explain": "",    # giải thích ngắn gọn
+        },
+        "openended": {
+            "title": "Tình huống/vụ việc",
+            "question": "Trả lời ngắn gọn theo ý bạn (2–5 dòng).",
+            "teacher_key": "Gợi ý chấm: nêu tiêu chí, lập luận, ví dụ minh họa.",
+        },
+        "scales": {
+            "title": "Tự đánh giá năng lực",
+            "question": "Tự đánh giá (1: thấp – 5: cao) theo các tiêu chí:",
+            "criteria": ["Tiêu chí 1", "Tiêu chí 2", "Tiêu chí 3", "Tiêu chí 4"],
+        },
+        "ranking": {
+            "title": "Ưu tiên phân tích",
+            "question": "Sắp xếp mức ưu tiên (quan trọng nhất lên đầu):",
+            "items": ["Mục 1", "Mục 2", "Mục 3", "Mục 4"],
+        },
+        "pin": {
+            "title": "Điểm nóng tình huống",
+            "question": "Ghim vị trí mô phỏng nơi 'điểm nóng' xuất hiện.",
+            "image": MAP_IMAGE,
+        }
+    }
+
+    # --- GROUP-SPECIFIC OVERRIDES ---
+    if n in [1, 2]:
+        content["wordcloud"].update({
+            "question": "1 từ khóa giúp bạn phân biệt 'nguyên nhân' với 'nguyên cớ/điều kiện' là gì?",
+            "hint": "Ví dụ: 'sinh ra', 'tất yếu', 'bên trong', 'ngoại tại', 'khả năng', ...",
+        })
+        content["poll"].update({
+            "question": "Đâu là mô tả đúng nhất về 'nguyên cớ'?",
+            "options": [
+                "A. Yếu tố bên trong sinh ra kết quả",
+                "B. Yếu tố xuất hiện trước kết quả nhưng chỉ là quan hệ ngẫu nhiên, không sinh ra kết quả",
+                "C. Tổng hợp mọi điều kiện cần và đủ",
+                "D. Kết quả quay lại tạo ra nguyên nhân ban đầu"
+            ],
+            "correct": "B",
+            "explain": "Nguyên cớ có thể đi trước và 'đi kèm' kết quả, nhưng không mang quan hệ sinh thành tất yếu như nguyên nhân."
+        })
+        content["openended"].update({
+            "question": "Từ một vụ va quẹt xe dẫn tới đánh nhau: hãy phân biệt 'nguyên nhân', 'nguyên cớ', 'điều kiện' của hậu quả.",
+            "teacher_key": "Nguyên nhân: mâu thuẫn/động cơ bạo lực; Nguyên cớ: va quẹt; Điều kiện: hung khí, kích động đám đông, thiếu can ngăn..."
+        })
+        content["scales"].update({
+            "criteria": [
+                "Phân biệt được nguyên nhân vs nguyên cớ",
+                "Nhận diện được điều kiện cần/đủ",
+                "Lập luận quan hệ tất yếu–ngẫu nhiên",
+                "Liên hệ thực tiễn điều tra/đánh giá tình huống"
+            ]
+        })
+        content["ranking"].update({
+            "items": [
+                "Xác định nguyên nhân trực tiếp",
+                "Xác định nguyên nhân sâu xa",
+                "Xác định nguyên cớ kích hoạt",
+                "Xác định chuỗi điều kiện làm bùng phát"
+            ]
+        })
+        content["pin"].update({
+            "question": "Ghim vị trí mô phỏng nơi 'điểm kích hoạt' xảy ra (nguyên cớ) so với nơi 'nguyên nhân' tích tụ.",
+        })
+
+    elif n in [3, 4]:
+        content["wordcloud"].update({
+            "question": "1 từ khóa mô tả đúng nhất 'phủ định biện chứng' (khách quan/kế thừa) là gì?",
+            "hint": "Ví dụ: 'tự thân', 'mâu thuẫn', 'kế thừa', 'vượt bỏ', 'xoáy ốc'...",
+        })
+        content["poll"].update({
+            "question": "Phát biểu nào phản ánh đúng 'đường xoáy ốc'?",
+            "options": [
+                "A. Phát triển là lặp lại y nguyên cái cũ",
+                "B. Phát triển là đường thẳng tăng dần, không quanh co",
+                "C. Phát triển có tính lặp lại nhưng ở trình độ cao hơn, thông qua các khâu trung gian",
+                "D. Phát triển là vòng tròn khép kín quay về điểm xuất phát"
+            ],
+            "correct": "C",
+            "explain": "Xoáy ốc: có tính lặp lại (kế thừa) nhưng không quay lại nguyên trạng; trình độ mới cao hơn."
+        })
+        content["openended"].update({
+            "question": "Chọn 1 ví dụ (tự nhiên/xã hội/tư duy) và giải thích vì sao cần ít nhất 'hai lần phủ định' để hình thành cái mới.",
+            "teacher_key": "Nêu: mâu thuẫn nội tại → phủ định lần 1 tạo cái đối lập; phủ định lần 2 loại bỏ yếu tố phi lý của đối lập và giữ hạt nhân hợp lý..."
+        })
+        content["scales"].update({
+            "criteria": [
+                "Hiểu phủ định biện chứng (khách quan)",
+                "Nhận ra tính kế thừa (giữ hạt nhân hợp lý)",
+                "Phân biệt phủ định siêu hình vs biện chứng",
+                "Vận dụng giải thích ví dụ mới"
+            ]
+        })
+        content["ranking"].update({
+            "items": [
+                "Chỉ ra mâu thuẫn nội tại",
+                "Xác định cái bị phủ định và cái được kế thừa",
+                "Mô tả khâu trung gian",
+                "Chứng minh 'cao hơn' ở lần phủ định thứ hai"
+            ]
+        })
+
+    elif n in [5, 6]:
+        content["wordcloud"].update({
+            "question": "1 từ khóa diễn tả 'bản chất con người' theo quan điểm Mác là gì?",
+            "hint": "Ví dụ: 'tổng hòa', 'quan hệ xã hội', 'thực tiễn', 'lao động'...",
+        })
+        content["poll"].update({
+            "question": "Câu nào gần nhất với quan điểm Mác về bản chất con người?",
+            "options": [
+                "A. Bản chất con người là bất biến, do sinh học quyết định",
+                "B. Bản chất con người là tổng hòa các quan hệ xã hội",
+                "C. Bản chất con người chỉ là ý thức cá nhân",
+                "D. Bản chất con người là bản năng tự nhiên thuần túy"
+            ],
+            "correct": "B",
+            "explain": "Trọng tâm: tính lịch sử–xã hội, thực tiễn; không quy giản vào sinh học hay ý thức chủ quan."
+        })
+        content["openended"].update({
+            "question": "Nêu 1 biểu hiện 'tha hóa trong lao động' và đề xuất 1 hướng 'giải phóng con người' (gợi ý theo Mác).",
+            "teacher_key": "Tha hóa: sản phẩm/hoạt động/lao động như lực lượng xa lạ; Giải phóng: cải biến quan hệ xã hội, điều kiện lao động, khôi phục tính người..."
+        })
+        content["scales"].update({
+            "criteria": [
+                "Hiểu quan niệm về con người (tự nhiên–xã hội)",
+                "Hiểu 'bản chất con người' theo Mác",
+                "Nhận diện cơ chế tha hóa",
+                "Đề xuất giải pháp giải phóng (thực tiễn)"
+            ]
+        })
+        content["ranking"].update({
+            "items": [
+                "Tha hóa sản phẩm lao động",
+                "Tha hóa quá trình lao động",
+                "Tha hóa bản chất loài (species-being)",
+                "Tha hóa quan hệ người–người"
+            ]
+        })
+
+    elif n in [7, 8]:
+        content["wordcloud"].update({
+            "question": "1 từ khóa mô tả đúng quan hệ cá nhân – xã hội là gì?",
+            "hint": "Ví dụ: 'thống nhất', 'tác động qua lại', 'điều kiện', 'chủ thể'...",
+        })
+        content["poll"].update({
+            "question": "Phát biểu nào đúng nhất về quan hệ cá nhân – xã hội?",
+            "options": [
+                "A. Cá nhân hoàn toàn quyết định xã hội",
+                "B. Xã hội hoàn toàn quyết định cá nhân theo cơ học",
+                "C. Cá nhân là sản phẩm xã hội nhưng đồng thời là chủ thể cải biến xã hội",
+                "D. Cá nhân và xã hội tách rời, không liên quan"
+            ],
+            "correct": "C",
+            "explain": "Quan hệ biện chứng: xã hội tạo điều kiện/khung; cá nhân hành động cải biến trong thực tiễn."
+        })
+        content["openended"].update({
+            "question": "Trong bối cảnh Việt Nam hiện nay, bạn thấy 'vấn đề con người' nổi bật nhất là gì? Nêu 1 luận điểm + 1 ví dụ.",
+            "teacher_key": "Có thể theo hướng: phát triển con người toàn diện, đạo đức công vụ, năng lực số, văn hóa pháp luật, trách nhiệm xã hội..."
+        })
+        content["scales"].update({
+            "criteria": [
+                "Nhìn được cá nhân trong mạng quan hệ xã hội",
+                "Nhìn được vai trò chủ thể của cá nhân",
+                "Liên hệ bối cảnh Việt Nam (đúng trọng tâm)",
+                "Đề xuất giải pháp phát triển con người"
+            ]
+        })
+        content["ranking"].update({
+            "items": [
+                "Đạo đức và văn hóa pháp luật",
+                "Năng lực nghề nghiệp và kỷ luật",
+                "Năng lực số và thích ứng biến đổi",
+                "Trách nhiệm công dân và cộng đồng"
+            ]
+        })
+
+    else:  # 9,10
+        content["wordcloud"].update({
+            "question": "1 từ khóa cốt lõi của triết học Mác-xít (thế giới quan/phương pháp luận) là gì?",
+            "hint": "Ví dụ: 'thực tiễn', 'biện chứng', 'vật chất', 'lịch sử'...",
+        })
+        content["poll"].update({
+            "question": "Đâu là điểm nhấn phương pháp luận của triết học Mác-xít?",
+            "options": [
+                "A. Giải thích thế giới bằng trực giác cá nhân",
+                "B. Coi thực tiễn là cơ sở, tiêu chuẩn của nhận thức và cải tạo hiện thực",
+                "C. Phủ nhận hoàn toàn vai trò của con người",
+                "D. Đồng nhất ý thức với vật chất"
+            ],
+            "correct": "B",
+            "explain": "Thực tiễn: nền tảng của nhận thức và hành động cải biến hiện thực."
+        })
+        content["openended"].update({
+            "question": "Chọn 1 cặp phạm trù/1 quy luật và nêu cách vận dụng vào tư duy nghề nghiệp (tổ chức, chỉ huy, ĐTV/trinh sát).",
+            "teacher_key": "Nhấn mạnh: tư duy chứng cứ, phân tích mâu thuẫn, điều kiện–nguyên nhân, phát triển biện chứng, tránh duy ý chí..."
+        })
+        content["scales"].update({
+            "criteria": [
+                "Nắm thế giới quan duy vật biện chứng",
+                "Nắm phương pháp luận biện chứng",
+                "Vận dụng phân tích tình huống",
+                "Trình bày lập luận chặt chẽ"
+            ]
+        })
+        content["ranking"].update({
+            "items": [
+                "Thực tiễn – nhận thức – hành động",
+                "Mâu thuẫn và giải quyết mâu thuẫn",
+                "Nguyên nhân – điều kiện – kết quả",
+                "Phát triển và phủ định biện chứng"
+            ]
+        })
+
+    return content
+
+
+# ==========================================
+# 3. MÀN HÌNH ĐĂNG NHẬP
 # ==========================================
 if not st.session_state['logged_in']:
     st.markdown("<br>", unsafe_allow_html=True)
@@ -375,6 +448,8 @@ if not st.session_state['logged_in']:
                 cid = CLASSES[c_class]
                 if c_pass.strip() == PASSWORDS[cid]:
                     st.session_state.update({'logged_in': True, 'role': 'student', 'class_id': cid})
+                    # NEW: default landing page is Activity Catalog
+                    st.session_state["menu"] = "📚 Danh mục hoạt động"
                     st.rerun()
                 else:
                     st.error("Sai mã lớp!")
@@ -384,16 +459,19 @@ if not st.session_state['logged_in']:
             if st.button("VÀO QUẢN TRỊ"):
                 if t_pass == "T05":
                     st.session_state.update({'logged_in': True, 'role': 'teacher', 'class_id': 'lop1'})
+                    # NEW: default landing page is Activity Catalog
+                    st.session_state["menu"] = "📚 Danh mục hoạt động"
                     st.rerun()
                 else:
                     st.error("Sai mật khẩu.")
 
 # ==========================================
-# 4. GIAO DIỆN CHÍNH (FULL INTERACTIVE)
-# - CHỈ THÊM: danh mục hoạt động theo lớp (Gradescope-like)
+# 4. GIAO DIỆN CHÍNH
 # ==========================================
 else:
-    class_cfg = get_class_cfg(st.session_state['class_id'])
+    # NEW: menu state
+    if "menu" not in st.session_state:
+        st.session_state["menu"] = "📚 Danh mục hoạt động"
 
     # --- SIDEBAR ---
     with st.sidebar:
@@ -410,29 +488,25 @@ else:
             st.warning("CHUYỂN LỚP QUẢN LÝ")
             s_cls = st.selectbox("", list(CLASSES.keys()), label_visibility="collapsed")
             st.session_state['class_id'] = CLASSES[s_cls]
-            class_cfg = get_class_cfg(st.session_state['class_id'])
 
         st.markdown("---")
-        st.caption("📌 CHỦ ĐỀ LỚP")
-        st.write(f"**{class_cfg['topic']}**")
 
-        st.markdown("---")
-        # DANH SÁCH HOẠT ĐỘNG - THEO LỚP (Mentimeter-like)
-        menu_labels = {
-            "🏠 Dashboard": "🏠 Dashboard",
-            "1️⃣ Word Cloud (Từ khóa)": f"1️⃣ {class_cfg['wordcloud']['title']}",
-            "2️⃣ Poll (Bình chọn)": f"2️⃣ {class_cfg['poll']['title']}",
-            "3️⃣ Open Ended (Hỏi đáp)": f"3️⃣ {class_cfg['openended']['title']}",
-            "4️⃣ Scales (Thang đo)": f"4️⃣ {class_cfg['scales']['title']}",
-            "5️⃣ Ranking (Xếp hạng)": f"5️⃣ {class_cfg['ranking']['title']}",
-            "6️⃣ Pin on Image (Ghim ảnh)": f"6️⃣ {class_cfg['pin']['title']}",
-        }
+        # UPDATED: include Activity Catalog like Gradescope
+        menu_items = [
+            "📚 Danh mục hoạt động",
+            "🏠 Dashboard",
+            "1️⃣ Word Cloud (Từ khóa)",
+            "2️⃣ Poll (Bình chọn)",
+            "3️⃣ Open Ended (Hỏi đáp)",
+            "4️⃣ Scales (Thang đo)",
+            "5️⃣ Ranking (Xếp hạng)",
+            "6️⃣ Pin on Image (Ghim ảnh)"
+        ]
 
-        menu = st.radio("DANH MỤC HOẠT ĐỘNG", list(menu_labels.values()))
-
-        # reverse map to canonical key
-        reverse_menu = {v: k for k, v in menu_labels.items()}
-        canonical_menu = reverse_menu[menu]
+        # Keep selection persistent
+        current_index = menu_items.index(st.session_state["menu"]) if st.session_state["menu"] in menu_items else 0
+        menu = st.radio("ĐIỀU HƯỚNG", menu_items, index=current_index)
+        st.session_state["menu"] = menu
 
         st.markdown("---")
         if st.button("THOÁT"):
@@ -440,13 +514,19 @@ else:
             st.rerun()
 
     # --- HEADER ---
-    st.markdown(
-        f"<h2 style='color:{PRIMARY_COLOR}; border-bottom:2px solid #e2e8f0; padding-bottom:10px;'>{menu}</h2>",
-        unsafe_allow_html=True
-    )
-    st.caption(f"Chủ đề lớp: **{class_cfg['topic']}**")
+    cfg = class_content(st.session_state["class_id"])
+    if menu == "📚 Danh mục hoạt động":
+        st.markdown(f"<div class='page-title'>🗂️ Danh mục hoạt động của lớp</div>", unsafe_allow_html=True)
+        st.markdown(f"<div class='subtle'>Chủ đề lớp: {cfg['topic']}</div>", unsafe_allow_html=True)
+        st.markdown("<hr style='border:0;border-top:2px solid #e2e8f0;margin:12px 0 18px 0;'/>", unsafe_allow_html=True)
+    else:
+        st.markdown(
+            f"<h2 style='color:{PRIMARY_COLOR}; border-bottom:2px solid #e2e8f0; padding-bottom:10px;'>{menu}</h2>",
+            unsafe_allow_html=True
+        )
+        st.caption(f"Chủ đề lớp: {cfg['topic']}")
 
-    # Lấy key hoạt động để lưu file (GIỮ NGUYÊN)
+    # Lấy key hoạt động để lưu file
     act_map = {
         "1️⃣ Word Cloud (Từ khóa)": "wordcloud",
         "2️⃣ Poll (Bình chọn)": "poll",
@@ -455,64 +535,71 @@ else:
         "5️⃣ Ranking (Xếp hạng)": "ranking",
         "6️⃣ Pin on Image (Ghim ảnh)": "pin"
     }
-    current_act_key = act_map.get(canonical_menu, "dashboard")
+    current_act_key = act_map.get(menu, "dashboard")
 
     # ==========================================
-    # DASHBOARD (Gradescope-like: danh sách hoạt động + số lượt)
+    # NEW: GRADESCOPE-LIKE ACTIVITY CATALOG (Mentimeter-like list)
     # ==========================================
-    if "Dashboard" in canonical_menu:
-        st.markdown("### 📚 Danh mục hoạt động của lớp")
-
-        activities = [
-            ("wordcloud", class_cfg["wordcloud"]["title"], "Từ khóa / Word Cloud"),
-            ("poll", class_cfg["poll"]["title"], "Bình chọn / Poll"),
-            ("openended", class_cfg["openended"]["title"], "Trả lời mở / Open Ended"),
-            ("scales", class_cfg["scales"]["title"], "Thang đo / Scales"),
-            ("ranking", class_cfg["ranking"]["title"], "Xếp hạng / Ranking"),
-            ("pin", class_cfg["pin"]["title"], "Ghim trên ảnh / Pin"),
+    if menu == "📚 Danh mục hoạt động":
+        # Render list rows with counts + OPEN button
+        rows = [
+            ("1️⃣ Word Cloud (Từ khóa)", "Từ khóa / Word Cloud", cfg["wordcloud"]["title"]),
+            ("2️⃣ Poll (Bình chọn)", "Bình chọn / Poll", cfg["poll"]["title"]),
+            ("3️⃣ Open Ended (Hỏi đáp)", "Trả lời mở / Open Ended", cfg["openended"]["title"]),
+            ("4️⃣ Scales (Thang đo)", "Thang đo / Scales", cfg["scales"]["title"]),
+            ("5️⃣ Ranking (Xếp hạng)", "Xếp hạng / Ranking", cfg["ranking"]["title"]),
+            ("6️⃣ Pin on Image (Ghim ảnh)", "Ghim trên ảnh / Pin", cfg["pin"]["title"]),
         ]
 
-        for act_key, title, typ in activities:
-            df = load_data(st.session_state['class_id'], act_key)
-            left, right = st.columns([5, 1])
+        for label, meta, title in rows:
+            act_key = act_map[label]
+            df_count = load_data(st.session_state['class_id'], act_key)
+            count = len(df_count)
+
+            left, right = st.columns([6, 1])
             with left:
                 st.markdown(f"""
-                <div class="gs-row">
-                    <div class="gs-title">{title}</div>
-                    <div class="gs-sub">Loại hoạt động: {typ} • Số lượt trả lời: <b>{len(df)}</b></div>
+                <div class="activity-row">
+                    <p class="activity-title">{title}</p>
+                    <p class="activity-meta">
+                        <span class="pill">{meta}</span>
+                        Số lượt trả lời: <b>{count}</b>
+                    </p>
                 </div>
                 """, unsafe_allow_html=True)
             with right:
-                # nút mở nhanh giống “Open Assignment”
-                if st.button("MỞ", key=f"open_{act_key}"):
-                    # set menu bằng cách lưu session_state và rerun
-                    st.session_state["__jump_to__"] = act_key
+                # IMPORTANT: unique key per button
+                if st.button("MỞ", key=f"open_{st.session_state['class_id']}_{act_key}"):
+                    st.session_state["menu"] = label
                     st.rerun()
 
-        # nếu có jump
-        if "__jump_to__" in st.session_state:
-            jump = st.session_state.pop("__jump_to__")
-            # chuyển sang canonical_menu tương ứng (giữ logic đơn giản)
-            if jump == "wordcloud":
-                st.info("Đang chuyển sang Word Cloud...")
-            elif jump == "poll":
-                st.info("Đang chuyển sang Poll...")
-            elif jump == "openended":
-                st.info("Đang chuyển sang Open Ended...")
-            elif jump == "scales":
-                st.info("Đang chuyển sang Scales...")
-            elif jump == "ranking":
-                st.info("Đang chuyển sang Ranking...")
-            elif jump == "pin":
-                st.info("Đang chuyển sang Pin...")
+        st.info("💡 Học viên bấm **MỞ** để trả lời. Giảng viên bấm **MỞ** để xem kết quả + dùng AI phân tích.")
+
+    # ==========================================
+    # DASHBOARD
+    # ==========================================
+    elif "Dashboard" in menu:
+        cols = st.columns(3)
+        activities = ["wordcloud", "poll", "openended", "scales", "ranking", "pin"]
+        names = ["Word Cloud", "Poll", "Open Ended", "Scales", "Ranking", "Pin Image"]
+
+        for i, act in enumerate(activities):
+            df = load_data(st.session_state['class_id'], act)
+            with cols[i % 3]:
+                st.markdown(f"""
+                <div class="viz-card" style="text-align:center;">
+                    <h1 style="color:{PRIMARY_COLOR}; margin:0; font-size:40px;">{len(df)}</h1>
+                    <p style="color:#64748b; font-weight:600; text-transform:uppercase;">{names[i]}</p>
+                </div>
+                """, unsafe_allow_html=True)
 
     # ==========================================
     # 1. WORD CLOUD
     # ==========================================
-    elif current_act_key == "wordcloud":
+    elif "Word Cloud" in menu:
         c1, c2 = st.columns([1, 2])
         with c1:
-            st.info(f"Câu hỏi: **{class_cfg['wordcloud']['q']}**")
+            st.info(f"Câu hỏi: **{cfg['wordcloud']['question']}**\n\nGợi ý: {cfg['wordcloud']['hint']}")
             if st.session_state['role'] == 'student':
                 with st.form("f_wc"):
                     n = st.text_input("Tên:")
@@ -520,7 +607,7 @@ else:
                     if st.form_submit_button("GỬI TỪ KHÓA"):
                         save_data(st.session_state['class_id'], current_act_key, n, txt)
                         st.success("Đã gửi!")
-                        time.sleep(0.3)
+                        time.sleep(0.5)
                         st.rerun()
             else:
                 st.warning("Giảng viên xem kết quả bên phải.")
@@ -542,11 +629,11 @@ else:
     # ==========================================
     # 2. POLL
     # ==========================================
-    elif current_act_key == "poll":
+    elif "Poll" in menu:
         c1, c2 = st.columns([1, 2])
-        options = class_cfg["poll"]["options"]
+        options = cfg["poll"]["options"]
         with c1:
-            st.info(f"Câu hỏi: **{class_cfg['poll']['q']}**")
+            st.info(f"Câu hỏi: **{cfg['poll']['question']}**")
             if st.session_state['role'] == 'student':
                 with st.form("f_poll"):
                     n = st.text_input("Tên:")
@@ -554,12 +641,15 @@ else:
                     if st.form_submit_button("BÌNH CHỌN"):
                         save_data(st.session_state['class_id'], current_act_key, n, vote)
                         st.success("Đã chọn!")
-                        time.sleep(0.3)
+                        time.sleep(0.5)
                         st.rerun()
 
-            # Gợi ý “đáp án” chỉ hiện cho GIẢNG VIÊN
-            if st.session_state['role'] == 'teacher':
-                st.caption(f"🔑 Đáp án dự kiến: **{class_cfg['poll'].get('answer_key','')}**")
+            # NEW: show answer key only to teacher
+            if st.session_state["role"] == "teacher" and cfg["poll"]["correct"]:
+                st.markdown("---")
+                st.success(f"Đáp án gợi ý: **{cfg['poll']['correct']}**")
+                if cfg["poll"]["explain"]:
+                    st.caption(cfg["poll"]["explain"])
 
         with c2:
             st.markdown("##### 📊 THỐNG KÊ LỰA CHỌN")
@@ -568,7 +658,7 @@ else:
                 if not df.empty:
                     cnt = df["Nội dung"].value_counts().reset_index()
                     cnt.columns = ["Lựa chọn", "Số lượng"]
-                    fig = px.bar(cnt, x="Lựa chọn", y="Số lượng", text_auto=True)
+                    fig = px.bar(cnt, x="Lựa chọn", y="Số lượng", color="Lựa chọn", text_auto=True)
                     st.plotly_chart(fig, use_container_width=True)
                 else:
                     st.info("Chưa có bình chọn nào.")
@@ -576,10 +666,10 @@ else:
     # ==========================================
     # 3. OPEN ENDED
     # ==========================================
-    elif current_act_key == "openended":
+    elif "Open Ended" in menu:
         c1, c2 = st.columns([1, 2])
         with c1:
-            st.info(f"**{class_cfg['openended']['q']}**")
+            st.info(f"**{cfg['openended']['question']}**")
             if st.session_state['role'] == 'student':
                 with st.form("f_open"):
                     n = st.text_input("Tên:")
@@ -587,27 +677,34 @@ else:
                     if st.form_submit_button("GỬI BÀI"):
                         save_data(st.session_state['class_id'], current_act_key, n, c)
                         st.success("Đã gửi!")
-                        time.sleep(0.3)
+                        time.sleep(0.5)
                         st.rerun()
+
+            if st.session_state["role"] == "teacher":
+                with st.expander("🔑 Gợi ý chấm / định hướng đáp án", expanded=False):
+                    st.write(cfg["openended"]["teacher_key"])
+
         with c2:
             st.markdown("##### 💬 BỨC TƯỜNG Ý KIẾN")
             df = load_data(st.session_state['class_id'], current_act_key)
             with st.container(border=True, height=500):
                 if not df.empty:
                     for _, r in df.iterrows():
-                        st.markdown(f'<div class="note-card"><b>{r["Học viên"]}</b>: {r["Nội dung"]}</div>',
-                                    unsafe_allow_html=True)
+                        st.markdown(
+                            f'<div class="note-card"><b>{r["Học viên"]}</b>: {r["Nội dung"]}</div>',
+                            unsafe_allow_html=True
+                        )
                 else:
                     st.info("Sàn ý kiến trống.")
 
     # ==========================================
     # 4. SCALES
     # ==========================================
-    elif current_act_key == "scales":
+    elif "Scales" in menu:
         c1, c2 = st.columns([1, 2])
-        criteria = class_cfg["scales"]["criteria"]
+        criteria = cfg["scales"]["criteria"]
         with c1:
-            st.info(f"**{class_cfg['scales']['q']}**")
+            st.info(f"**{cfg['scales']['question']}**")
             if st.session_state['role'] == 'student':
                 with st.form("f_scale"):
                     n = st.text_input("Tên:")
@@ -618,8 +715,9 @@ else:
                         val = ",".join(map(str, scores))
                         save_data(st.session_state['class_id'], current_act_key, n, val)
                         st.success("Đã lưu!")
-                        time.sleep(0.3)
+                        time.sleep(0.5)
                         st.rerun()
+
         with c2:
             st.markdown("##### 🕸️ MẠNG NHỆN NĂNG LỰC")
             df = load_data(st.session_state['class_id'], current_act_key)
@@ -628,7 +726,7 @@ else:
                     try:
                         data_matrix = []
                         for item in df["Nội dung"]:
-                            data_matrix.append([int(x) for x in str(item).split(',') if str(x).strip() != ""])
+                            data_matrix.append([int(x) for x in str(item).split(',')])
                         if len(data_matrix) > 0:
                             avg_scores = np.mean(data_matrix, axis=0)
                             fig = go.Figure(data=go.Scatterpolar(
@@ -647,23 +745,24 @@ else:
     # ==========================================
     # 5. RANKING
     # ==========================================
-    elif current_act_key == "ranking":
+    elif "Ranking" in menu:
         c1, c2 = st.columns([1, 2])
-        items = class_cfg["ranking"]["items"]
+        items = cfg["ranking"]["items"]
         with c1:
-            st.info(f"**{class_cfg['ranking']['q']}**")
+            st.info(f"**{cfg['ranking']['question']}**")
             if st.session_state['role'] == 'student':
                 with st.form("f_rank"):
                     n = st.text_input("Tên:")
-                    rank = st.multiselect("Thứ tự (chọn đủ tất cả mục):", items)
+                    rank = st.multiselect("Thứ tự:", items)
                     if st.form_submit_button("NỘP BẢNG XẾP HẠNG"):
                         if len(rank) == len(items):
                             save_data(st.session_state['class_id'], current_act_key, n, "->".join(rank))
                             st.success("Đã nộp!")
-                            time.sleep(0.3)
+                            time.sleep(0.5)
                             st.rerun()
                         else:
                             st.warning(f"Vui lòng chọn đủ {len(items)} mục.")
+
         with c2:
             st.markdown("##### 🏆 KẾT QUẢ XẾP HẠNG")
             df = load_data(st.session_state['class_id'], current_act_key)
@@ -690,11 +789,10 @@ else:
     # ==========================================
     # 6. PIN ON IMAGE
     # ==========================================
-    elif current_act_key == "pin":
+    elif "Pin on Image" in menu:
         c1, c2 = st.columns([1, 2])
-        pin_img = class_cfg["pin"].get("image", MAP_IMAGE)
         with c1:
-            st.info(f"**{class_cfg['pin']['q']}**")
+            st.info(f"**{cfg['pin']['question']}**")
             if st.session_state['role'] == 'student':
                 with st.form("f_pin"):
                     n = st.text_input("Tên:")
@@ -703,10 +801,11 @@ else:
                     if st.form_submit_button("GHIM VỊ TRÍ"):
                         save_data(st.session_state['class_id'], current_act_key, n, f"{x_val},{y_val}")
                         st.success("Đã ghim!")
-                        time.sleep(0.3)
+                        time.sleep(0.5)
                         st.rerun()
+
         with c2:
-            st.markdown("##### 📍 BẢN ĐỒ (PIN)")
+            st.markdown("##### 📍 BẢN ĐỒ NHIỆT (HEATMAP)")
             df = load_data(st.session_state['class_id'], current_act_key)
             with st.container(border=True):
                 if not df.empty:
@@ -720,19 +819,21 @@ else:
                         fig = go.Figure()
                         fig.add_trace(go.Scatter(
                             x=xs, y=ys, mode='markers',
-                            marker=dict(size=12, color='red', opacity=0.7, line=dict(width=1, color='white')),
+                            marker=dict(size=12, color='red', opacity=0.7,
+                                        line=dict(width=1, color='white')),
                             name='Vị trí ghim'
                         ))
+
                         fig.update_layout(
                             xaxis=dict(range=[0, 100], showgrid=False, zeroline=False, visible=False),
                             yaxis=dict(range=[0, 100], showgrid=False, zeroline=False, visible=False),
                             images=[dict(
-                                source=pin_img,
+                                source=cfg["pin"]["image"],
                                 xref="x", yref="y",
                                 x=0, y=100, sizex=100, sizey=100,
                                 sizing="stretch", layer="below"
                             )],
-                            width=700, height=420, margin=dict(l=0, r=0, t=0, b=0)
+                            width=600, height=400, margin=dict(l=0, r=0, t=0, b=0)
                         )
                         st.plotly_chart(fig, use_container_width=True)
                     except:
@@ -741,40 +842,42 @@ else:
                     st.info("Chưa có ghim nào.")
 
     # ==========================================
-    # CONTROL PANEL CHO GIẢNG VIÊN (CHUNG CHO MỌI TAB) - GIỮ NGUYÊN, CHỈ BỔ SUNG “gợi ý prompt”
+    # CONTROL PANEL CHO GIẢNG VIÊN (CHUNG CHO MỌI TAB)
     # ==========================================
-    if st.session_state['role'] == 'teacher' and "Dashboard" not in canonical_menu:
+    if st.session_state['role'] == 'teacher' and (menu not in ["📚 Danh mục hoạt động", "🏠 Dashboard"]):
         st.markdown("---")
         with st.expander("👮‍♂️ BẢNG ĐIỀU KHIỂN GIẢNG VIÊN (Dành riêng cho hoạt động này)", expanded=True):
             col_ai, col_reset = st.columns([3, 1])
 
             with col_ai:
                 st.markdown("###### 🤖 AI Trợ giảng")
-                default_hint = f"Phân tích xu hướng trả lời của lớp về: {menu}. Nêu 3 điểm mạnh, 3 ngộ nhận, và 3 gợi ý giảng tiếp."
-                prompt = st.text_input("Nhập lệnh cho AI:", value=default_hint)
-
+                prompt = st.text_input("Nhập lệnh cho AI:", placeholder=f"Ví dụ: Phân tích xu hướng của {menu}...")
                 if st.button("PHÂN TÍCH NGAY") and prompt:
                     curr_df = load_data(st.session_state['class_id'], current_act_key)
-                    if curr_df.empty:
-                        st.warning("Chưa có dữ liệu để phân tích.")
-                    else:
-                        if model is None:
-                            st.error("Chưa cấu hình GEMINI_API_KEY trong secrets.")
-                        else:
-                            with st.spinner("AI đang suy nghĩ..."):
+                    if not curr_df.empty:
+                        with st.spinner("AI đang suy nghĩ..."):
+                            if model is None:
+                                st.warning("Chưa cấu hình GEMINI_API_KEY trong secrets.")
+                            else:
+                                # Provide the class topic + activity config for better AI analysis
+                                activity_cfg = cfg.get(current_act_key, {})
+                                payload = {
+                                    "topic": cfg["topic"],
+                                    "activity": menu,
+                                    "activity_cfg": activity_cfg,
+                                    "data_preview": curr_df.to_dict(orient="records")[:200]
+                                }
                                 res = model.generate_content(
-                                    f"Chủ đề lớp: {class_cfg['topic']}.\n"
-                                    f"Hoạt động: {menu}.\n"
-                                    f"Dữ liệu (bảng):\n{curr_df.to_string(index=False)}\n\n"
-                                    f"Yêu cầu giảng viên: {prompt}\n"
-                                    f"Yêu cầu trình bày: ngắn gọn, gạch đầu dòng, chỉ ra mô thức sai lầm và đề xuất câu hỏi gợi mở tiếp theo."
+                                    f"Dữ liệu lớp học (JSON): {payload}. Yêu cầu giảng viên: {prompt}"
                                 )
                                 st.info(res.text)
+                    else:
+                        st.warning("Chưa có dữ liệu để phân tích.")
 
             with col_reset:
                 st.markdown("###### 🗑 Xóa dữ liệu")
                 if st.button(f"RESET {menu}", type="secondary"):
                     clear_activity(st.session_state['class_id'], current_act_key)
                     st.toast(f"Đã xóa sạch dữ liệu {menu}")
-                    time.sleep(0.6)
+                    time.sleep(1)
                     st.rerun()
