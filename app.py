@@ -575,27 +575,28 @@ def render_activity():
                         total_people = int(tmp["Học viên"].nunique())
                         total_unique_phrases = int(len(freq))
 
-                        comp_html = f"""
+# --- THAY TOÀN BỘ ĐOẠN comp_html = f"""...""" BẰNG ĐOẠN NÀY ---
+comp_html = """
 <!doctype html>
 <html>
 <head>
   <meta charset="utf-8"/>
   <style>
-    body {{ margin:0; background:white; }}
-    #wc-wrap {{
+    body { margin:0; background:white; }
+    #wc-wrap {
       width: 100%;
       height: 520px;
       border-radius: 12px;
       background: #ffffff;
       overflow: hidden;
-    }}
-    svg {{ width:100%; height:100%; display:block; }}
-    .word {{
+    }
+    svg { width:100%; height:100%; display:block; }
+    .word {
       font-family: 'Montserrat', system-ui, -apple-system, Segoe UI, Roboto, Arial, sans-serif;
       font-weight: 800;
       cursor: default;
       user-select: none;
-    }}
+    }
   </style>
 </head>
 <body>
@@ -604,21 +605,21 @@ def render_activity():
   <script src="https://cdn.jsdelivr.net/npm/d3@7/dist/d3.min.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/d3-cloud@1/build/d3.layout.cloud.js"></script>
   <script>
-    const data = {words_json};
+    const data = __WORDS_JSON__;
 
     const wrap = document.getElementById("wc-wrap");
     const W = wrap.clientWidth || 900;
     const H = wrap.clientHeight || 520;
 
     // Stable RNG for layout stability (less jumping)
-    function mulberry32(a) {{
-      return function() {{
+    function mulberry32(a) {
+      return function() {
         var t = a += 0x6D2B79F5;
         t = Math.imul(t ^ t >>> 15, t | 1);
         t ^= t + Math.imul(t ^ t >>> 7, t | 61);
         return ((t ^ t >>> 14) >>> 0) / 4294967296;
-      }}
-    }}
+      }
+    }
     const rng = mulberry32(42);
 
     // Log scale for font sizes (3-5x gap). Handle vmax==vmin => all same size.
@@ -627,46 +628,46 @@ def render_activity():
     const vmax = Math.max(1, d3.max(vals));
 
     let fontScale;
-    if (vmax === vmin) {{
+    if (vmax === vmin) {
       // tất cả cùng 1 vote => cùng size (tránh chữ to/nhỏ vô lý)
       fontScale = () => 64;
-    }} else {{
+    } else {
       fontScale = d3.scaleLog()
         .domain([vmin, vmax])
         .range([28, 110])
         .clamp(true);
-    }}
+    }
 
     // Orientation: 70% horizontal, 30% vertical (-90)
-    function rotateFn() {{
+    function rotateFn() {
       return (rng() < 0.70) ? 0 : -90;
-    }}
+    }
 
     // Modern/Vibrant color using golden ratio hue
     const GOLDEN_RATIO = 0.61803398875;
     let hue = 0.12;
 
-    function nextColor(prevHue) {{
+    function nextColor(prevHue) {
       hue = (hue + GOLDEN_RATIO) % 1.0;
       let h = hue * 360;
 
-      if (prevHue !== null) {{
+      if (prevHue !== null) {
         const diff = Math.abs(h - prevHue);
         if (diff < 22) h = (h + 35) % 360;
-      }}
-      return {{ color: `hsl(${h}, 85%, 52%)`, hue: h }};
-    }}
+      }
+      return { color: `hsl(${h}, 85%, 52%)`, hue: h };
+    }
 
     const words = data
       .slice()
       .sort((a,b) => d3.descending(a.value, b.value))
-      .map(d => ({{
+      .map(d => ({
         text: d.text,
         value: d.value,
         size: Math.round(fontScale(d.value)),
         rotate: rotateFn(),
         __key: d.text
-      }}));
+      }));
 
     const svg = d3.select("#wc-wrap").append("svg")
       .attr("viewBox", `0 0 ${W} ${H}`);
@@ -676,21 +677,21 @@ def render_activity():
 
     // Keep previous positions for smooth transitions
     const prev = new Map();
-    try {{
+    try {
       const saved = sessionStorage.getItem("wc_prev");
-      if (saved) {{
+      if (saved) {
         const obj = JSON.parse(saved);
         Object.keys(obj).forEach(k => prev.set(k, obj[k]));
-      }}
-    }} catch(e) {{}}
+      }
+    } catch(e) {}
 
-    function savePrev(map) {{
-      try {{
-        const obj = {{}};
+    function savePrev(map) {
+      try {
+        const obj = {};
         map.forEach((v,k)=> obj[k]=v);
         sessionStorage.setItem("wc_prev", JSON.stringify(obj));
-      }} catch(e) {{}}
-    }}
+      } catch(e) {}
+    }
 
     const layout = d3.layout.cloud()
       .size([W, H])
@@ -705,7 +706,7 @@ def render_activity():
     layout.on("end", draw);
     layout.start();
 
-    function draw(placed) {{
+    function draw(placed) {
       // Rule center: top word must be at (0,0)
       const top = placed[0];
       const dx = top ? -top.x : 0;
@@ -713,22 +714,22 @@ def render_activity():
       placed.forEach(w => {
         w.x = w.x + dx;
         w.y = w.y + dy;
-      }});
+      });
 
       // Colors with stability
       let prevHue = null;
       const colorMap = new Map();
-      placed.forEach(w => {{
+      placed.forEach(w => {
         const p = prev.get(w.__key);
-        if (p && p.color) {{
+        if (p && p.color) {
           colorMap.set(w.__key, p.color);
-          prevHue = p.hue ?? prevHue;
-        }} else {{
+          prevHue = (p.hue !== undefined && p.hue !== null) ? p.hue : prevHue;
+        } else {
           const c = nextColor(prevHue);
           colorMap.set(w.__key, c);
           prevHue = c.hue;
-        }}
-      }});
+        }
+      });
 
       const sel = g.selectAll("text.word")
         .data(placed, d => d.__key);
@@ -746,7 +747,7 @@ def render_activity():
 
       const merged = enter.merge(sel);
 
-      merged.each(function(d) {{
+      merged.each(function(d) {
         const node = d3.select(this);
         const p = prev.get(d.__key);
 
@@ -756,13 +757,13 @@ def render_activity():
         const s0 = p ? p.size : 0;
 
         const c = colorMap.get(d.__key);
-        const col = c.color ? c.color : c;
+        const col = (c && c.color) ? c.color : c;
 
         node
           .attr("transform", `translate(${x0},${y0}) rotate(${r0})`)
           .style("fill", col)
           .style("font-size", `${s0}px`);
-      }});
+      });
 
       merged.transition()
         .duration(800)
@@ -772,23 +773,23 @@ def render_activity():
         .style("font-size", d => `${d.size}px`);
 
       const nextPrev = new Map();
-      placed.forEach(d => {{
+      placed.forEach(d => {
         const c = colorMap.get(d.__key);
-        if (c && c.color) {{
-          nextPrev.set(d.__key, {{x:d.x, y:d.y, rotate:d.rotate, size:d.size, color:c, hue:c.hue}});
-        }} else {{
-          nextPrev.set(d.__key, {{x:d.x, y:d.y, rotate:d.rotate, size:d.size, color:c}});
-        }}
-      }});
+        if (c && c.color) {
+          nextPrev.set(d.__key, {x:d.x, y:d.y, rotate:d.rotate, size:d.size, color:c, hue:c.hue});
+        } else {
+          nextPrev.set(d.__key, {x:d.x, y:d.y, rotate:d.rotate, size:d.size, color:c});
+        }
+      });
       savePrev(nextPrev);
-    }}
+    }
   </script>
 </body>
 </html>
 """
+comp_html = comp_html.replace("__WORDS_JSON__", words_json)
 
-                        st.components.v1.html(comp_html, height=540, scrolling=False)
-
+st.components.v1.html(comp_html, height=540, scrolling=False)
                         st.caption(
                             f"👥 Lượt gửi: **{total_answers}** • 👤 Người tham gia (unique): **{total_people}** • 🧩 Cụm duy nhất: **{total_unique_phrases}**"
                         )
