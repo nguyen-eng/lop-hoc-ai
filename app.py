@@ -602,7 +602,7 @@ def render_activity():
             tcol1, tcol2, tcol3 = st.columns([2, 2, 2])
             with tcol1:
                 live = st.toggle("🔴 Live update (1.5s)", value=True, key="wc_live_toggle")
-           with tcol2:
+            with tcol2:
                 if st.button("🖥 Fullscreen Wordcloud", key="wc_btn_full"):
                     st.experimental_set_query_params(wcfs="1")
                     st.rerun()
@@ -926,10 +926,8 @@ if is_fs:
 
     # Khi fullscreen thì không cần render các phần phía dưới nữa
     return
-            
-                    # ✅ mở fullscreen bằng dialog tương thích phiên bản streamlit
-                    open_wc_fullscreen_dialog(wc_html_fs, live)
-
+        # ✅ mở fullscreen bằng dialog tương thích phiên bản streamlit
+        open_wc_fullscreen_dialog(wc_html_fs, live)
 
     # ------------------------------------------
     # 2) POLL
