@@ -10,6 +10,7 @@ import threading
 import matplotlib.pyplot as plt
 from wordcloud import WordCloud
 import numpy as np
+from collections import Counter  # ✅ đưa lên đây để tránh lỗi thụt lề
 
 # ==========================================
 # 1. CẤU HÌNH & GIAO DIỆN (UI/UX)
@@ -121,17 +122,6 @@ st.markdown(f"""
         box-shadow: 0 6px 18px rgba(0, 106, 78, 0.22);
     }}
     div.stButton > button:hover {{ background-color: #00503a; transform: translateY(-1px); }}
-
-    /* SECONDARY BUTTON STYLE (fake via container) */
-    .soft-btn {{
-        display:inline-block;
-        padding: 10px 14px;
-        border-radius: 12px;
-        border: 1px solid #e2e8f0;
-        background: white;
-        color: #0f172a;
-        font-weight: 700;
-    }}
 
     /* NOTE CARD */
     .note-card {{
@@ -268,7 +258,6 @@ def class_topic(cid: str) -> str:
         return "Triết học về con người: cá nhân – xã hội; vấn đề con người trong Việt Nam"
     return "Triết học Mác-xít (tổng quan các vấn đề cơ bản)"
 
-# Mỗi lớp có 6 hoạt động sẵn (bạn có thể chỉnh câu hỏi ngay trong dict này)
 CLASS_ACT_CONFIG = {}
 for i in range(1, 11):
     cid = f"lop{i}"
@@ -362,7 +351,7 @@ if not st.session_state.get("logged_in", False) or st.session_state.get("page", 
 
     with tab_sv:
         c_class = st.selectbox("Chọn lớp", list(CLASSES.keys()))
-        c_pass = st.text_input("Mã lớp", type="password")  # ✅ bỏ placeholder để không lộ gợi ý
+        c_pass = st.text_input("Mã lớp", type="password")  # ✅ không placeholder
         if st.button("THAM GIA LỚP HỌC", key="btn_join"):
             cid = CLASSES[c_class]
             if c_pass.strip() == PASSWORDS[cid]:
@@ -384,7 +373,7 @@ if not st.session_state.get("logged_in", False) or st.session_state.get("page", 
     st.stop()
 
 # ==========================================
-# 5. SIDEBAR + NAV (giữ lại, nhưng page chính là danh mục)
+# 5. SIDEBAR + NAV
 # ==========================================
 with st.sidebar:
     st.image(LOGO_URL, width=80)
@@ -396,30 +385,26 @@ with st.sidebar:
     role = "HỌC VIÊN" if st.session_state["role"] == "student" else "GIẢNG VIÊN"
     st.info(f"👤 {role}\n\n🏫 {cls_txt}")
 
-    # GV được phép chuyển lớp
     if st.session_state["role"] == "teacher":
         st.warning("CHUYỂN LỚP QUẢN LÝ")
         s_cls = st.selectbox("", list(CLASSES.keys()), label_visibility="collapsed")
         st.session_state["class_id"] = CLASSES[s_cls]
 
     st.markdown("---")
-    # ✅ Luôn có nút về "Danh mục hoạt động" như Gradescope
     if st.button("📚 Danh mục hoạt động", key="nav_class_home"):
         st.session_state["page"] = "class_home"
         st.rerun()
 
-    # ✅ Dashboard (tùy chọn)
     if st.button("🏠 Dashboard", key="nav_dashboard"):
         st.session_state["page"] = "dashboard"
         st.rerun()
 
     st.markdown("---")
-    # ✅ Quay lại đăng nhập (thoát)
     if st.button("↩️ Quay lại đăng nhập", key="nav_logout"):
         reset_to_login()
 
 # ==========================================
-# 6. TRANG "DANH MỤC HOẠT ĐỘNG CỦA LỚP" (Gradescope-ish)
+# 6. TRANG "DANH MỤC HOẠT ĐỘNG CỦA LỚP"
 # ==========================================
 def render_class_home():
     cid = st.session_state["class_id"]
@@ -437,7 +422,6 @@ def render_class_home():
         </div>
     """, unsafe_allow_html=True)
 
-    # ✅ Nút quay về đăng nhập ngay trong lớp (yêu cầu của bạn)
     c_back, c_space = st.columns([1, 5])
     with c_back:
         if st.button("↩️ Đăng xuất", key="btn_logout_top"):
@@ -445,7 +429,6 @@ def render_class_home():
     with c_space:
         st.caption("Chọn một hoạt động để vào làm bài / xem kết quả (GV có thêm phân tích AI & reset).")
 
-    # List rows
     def open_activity(act_key: str):
         st.session_state["current_act_key"] = act_key
         st.session_state["page"] = "activity"
@@ -474,14 +457,13 @@ def render_class_home():
                 </div>
             """, unsafe_allow_html=True)
         with colR:
-            # nút mở
             if st.button("MỞ", key=f"open_{ksuffix}"):
                 open_activity(act_key)
 
     st.markdown("</div>", unsafe_allow_html=True)
 
 # ==========================================
-# 7. DASHBOARD (giữ nguyên, chỉ thêm tiêu đề theo chủ đề lớp)
+# 7. DASHBOARD
 # ==========================================
 def render_dashboard():
     cid = st.session_state["class_id"]
@@ -506,14 +488,13 @@ def render_dashboard():
     st.caption("Gợi ý: dùng sidebar → “Danh mục hoạt động” để mở hoạt động như Mentimeter.")
 
 # ==========================================
-# 8. TRANG HOẠT ĐỘNG (giữ nguyên các hoạt động cũ, chỉ lấy câu hỏi theo lớp)
+# 8. TRANG HOẠT ĐỘNG
 # ==========================================
 def render_activity():
     cid = st.session_state["class_id"]
     act = st.session_state.get("current_act_key", "wordcloud")
     cfg = CLASS_ACT_CONFIG[cid][act]
 
-    # ✅ Nút quay về danh mục lớp ngay đầu trang
     topL, topR = st.columns([1, 5])
     with topL:
         if st.button("↩️ Về danh mục lớp", key="btn_back_class_home"):
@@ -528,7 +509,7 @@ def render_activity():
     current_act_key = act
 
     # ------------------------------------------
-    # 1) WORD CLOUD
+    # 1) WORD CLOUD  ✅ SỬA: GIỮ NGUYÊN CỤM TỪ
     # ------------------------------------------
     if act == "wordcloud":
         c1, c2 = st.columns([1, 2])
@@ -537,42 +518,43 @@ def render_activity():
             if st.session_state["role"] == "student":
                 with st.form("f_wc"):
                     n = st.text_input("Tên")
-                    txt = st.text_input("Nhập 1 từ khóa")
+                    txt = st.text_input("Nhập 1 từ khóa / cụm từ")
                     if st.form_submit_button("GỬI"):
                         if n.strip() and txt.strip():
                             save_data(cid, current_act_key, n, txt)
-                            st.success("Đã gửi!"); time.sleep(0.3); st.rerun()
+                            st.success("Đã gửi!")
+                            time.sleep(0.3)
+                            st.rerun()
                         else:
                             st.warning("Vui lòng nhập đủ Tên và Từ khóa.")
             else:
                 st.warning("Giảng viên xem kết quả bên phải.")
+
         with c2:
             st.markdown("##### ☁️ KẾT QUẢ")
             df = load_data(cid, current_act_key)
             with st.container(border=True):
                 if not df.empty:
-from collections import Counter
-# Giữ nguyên cụm từ/câu mà học viên nhập (không tách theo khoảng trắng)
-phrases = (
-    df["Nội dung"]
-    .astype(str)
-    .map(lambda x: x.strip())
-    .tolist()
-)
-# Đếm tần suất theo đúng "cụm" (ví dụ: "Gây nên hậu quả" được tính là 1 mục)
-freq = Counter([p for p in phrases if p])
+                    # ✅ giữ nguyên cụm: mỗi dòng là 1 “phrase” (không tách theo khoảng trắng)
+                    phrases = (
+                        df["Nội dung"]
+                        .astype(str)
+                        .map(lambda x: x.strip())
+                        .tolist()
+                    )
+                    freq = Counter([p for p in phrases if p])
 
-# Tạo wordcloud từ tần suất (key có thể chứa dấu cách => vẫn hiển thị nguyên cụm)
-wc = WordCloud(
-    width=800,
-    height=400,
-    background_color="white",
-    colormap="ocean",
-    collocations=False,   # tránh tự ghép cụm “lạ”
-    prefer_horizontal=0.95
-).generate_from_frequencies(freq)
+                    wc = WordCloud(
+                        width=800,
+                        height=400,
+                        background_color="white",
+                        colormap="ocean",
+                        collocations=False,
+                        prefer_horizontal=0.95
+                    ).generate_from_frequencies(freq)
+
                     fig, ax = plt.subplots()
-                    ax.imshow(wc, interpolation='bilinear')
+                    ax.imshow(wc, interpolation="bilinear")
                     ax.axis("off")
                     st.pyplot(fig)
                 else:
@@ -593,7 +575,9 @@ wc = WordCloud(
                     if st.form_submit_button("BÌNH CHỌN"):
                         if n.strip():
                             save_data(cid, current_act_key, n, vote)
-                            st.success("Đã chọn!"); time.sleep(0.3); st.rerun()
+                            st.success("Đã chọn!")
+                            time.sleep(0.3)
+                            st.rerun()
                         else:
                             st.warning("Vui lòng nhập Tên.")
             else:
@@ -624,7 +608,9 @@ wc = WordCloud(
                     if st.form_submit_button("GỬI"):
                         if n.strip() and c.strip():
                             save_data(cid, current_act_key, n, c)
-                            st.success("Đã gửi!"); time.sleep(0.3); st.rerun()
+                            st.success("Đã gửi!")
+                            time.sleep(0.3)
+                            st.rerun()
                         else:
                             st.warning("Vui lòng nhập đủ Tên và nội dung.")
         with c2:
@@ -655,7 +641,9 @@ wc = WordCloud(
                         if n.strip():
                             val = ",".join(map(str, scores))
                             save_data(cid, current_act_key, n, val)
-                            st.success("Đã lưu!"); time.sleep(0.3); st.rerun()
+                            st.success("Đã lưu!")
+                            time.sleep(0.3)
+                            st.rerun()
                         else:
                             st.warning("Vui lòng nhập Tên.")
         with c2:
@@ -698,7 +686,9 @@ wc = WordCloud(
                             st.warning(f"Vui lòng chọn đủ {len(items)} mục.")
                         else:
                             save_data(cid, current_act_key, n, "->".join(rank))
-                            st.success("Đã nộp!"); time.sleep(0.3); st.rerun()
+                            st.success("Đã nộp!")
+                            time.sleep(0.3)
+                            st.rerun()
         with c2:
             st.markdown("##### 🏆 KẾT QUẢ")
             df = load_data(cid, current_act_key)
@@ -735,7 +725,9 @@ wc = WordCloud(
                     if st.form_submit_button("GHIM"):
                         if n.strip():
                             save_data(cid, current_act_key, n, f"{x_val},{y_val}")
-                            st.success("Đã ghim!"); time.sleep(0.3); st.rerun()
+                            st.success("Đã ghim!")
+                            time.sleep(0.3)
+                            st.rerun()
                         else:
                             st.warning("Vui lòng nhập Tên.")
         with c2:
@@ -818,7 +810,9 @@ Hãy trả lời theo cấu trúc:
                 st.markdown("###### 🗑 Xóa dữ liệu")
                 if st.button("RESET HOẠT ĐỘNG", key="btn_reset"):
                     clear_activity(cid, current_act_key)
-                    st.toast("Đã xóa dữ liệu hoạt động"); time.sleep(0.6); st.rerun()
+                    st.toast("Đã xóa dữ liệu hoạt động")
+                    time.sleep(0.6)
+                    st.rerun()
 
 # ==========================================
 # 9. ROUTER
