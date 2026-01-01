@@ -12,7 +12,7 @@ from wordcloud import WordCloud
 import numpy as np
 from collections import Counter
 from io import BytesIO
-import random # Import random ở đầu file để tránh lỗi thiếu thư viện
+import random  # Import random ở đầu file để tránh lỗi thiếu thư viện
 
 # ==========================================
 # 1. CẤU HÌNH & GIAO DIỆN (UI/UX)
@@ -336,7 +336,7 @@ if (not st.session_state.get("logged_in", False)) or (st.session_state.get("page
                 </div>
                 <div>
                     <p class="hero-title">TRƯỜNG ĐẠI HỌC CẢNH SÁT NHÂN DÂN</p>
-                    <p class="hero-sub">Hệ thống tương tác lớp học (Mentimeter-style)</p>
+                    <p class="hero-sub">Hệ thống tương tác lớp học </p>
                 </div>
             </div>
             <div class="hero-body">
@@ -575,8 +575,8 @@ def render_activity():
                         total_people = int(tmp["Học viên"].nunique())
                         total_unique_phrases = int(len(freq))
 
-# --- THAY TOÀN BỘ ĐOẠN comp_html = f"""...""" BẰNG ĐOẠN NÀY ---
-comp_html = """
+                        # --- WORDCLOUD HTML (D3) ---
+                        comp_html = """
 <!doctype html>
 <html>
 <head>
@@ -787,9 +787,10 @@ comp_html = """
 </body>
 </html>
 """
-comp_html = comp_html.replace("__WORDS_JSON__", words_json)
+                        comp_html = comp_html.replace("__WORDS_JSON__", words_json)
 
-st.components.v1.html(comp_html, height=540, scrolling=False)
+                        st.components.v1.html(comp_html, height=540, scrolling=False)
+
                         st.caption(
                             f"👥 Lượt gửi: **{total_answers}** • 👤 Người tham gia (unique): **{total_people}** • 🧩 Cụm duy nhất: **{total_unique_phrases}**"
                         )
