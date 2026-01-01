@@ -14,6 +14,12 @@ from collections import Counter
 from io import BytesIO
 import random  # Import random ở đầu file để tránh lỗi thiếu thư viện
 
+# --- LIVE REFRESH (fix lỗi st.autorefresh không tồn tại) ---
+try:
+    from streamlit_autorefresh import st_autorefresh
+except Exception:
+    st_autorefresh = None
+
 # ==========================================
 # 1. CẤU HÌNH & GIAO DIỆN (UI/UX)
 # ==========================================
@@ -215,6 +221,10 @@ if "page" not in st.session_state:
 # which activity: wordcloud/poll/openended/scales/ranking/pin
 if "current_act_key" not in st.session_state:
     st.session_state["current_act_key"] = "dashboard"
+
+# fullscreen flag
+if "wc_fullscreen" not in st.session_state:
+    st.session_state["wc_fullscreen"] = False
 
 def get_path(cls, act):
     return f"data_{cls}_{act}.csv"
@@ -514,7 +524,7 @@ def render_activity():
     current_act_key = act
 
     # ------------------------------------------
-    # 1) WORD CLOUD (Mentimeter-like, stable layout + center by bounding box + live update)
+    # 1) WORD CLOUD (Mentimeter-like)
     # ------------------------------------------
     if act == "wordcloud":
         c1, c2 = st.columns([1, 2])
@@ -539,69 +549,72 @@ def render_activity():
 
         # --- CỘT PHẢI: HIỂN THỊ KẾT QUẢ ---
         with c2:
-            st.markdown("##### ☁️ KẾT QUẢ (tự cập nhật)")
+            # Live update (không crash nếu thiếu lib)
+            live = st.toggle("🔴 Live update (1.5s)", value=True, key="wc_live_toggle")
+            if live:
+                if st_autorefresh is not None:
+                    st_autorefresh(interval=1500, key="wc_live_refresh")
+                else:
+                    st.warning("Chưa có thư viện streamlit-autorefresh → Live update tự động chưa hoạt động. "
+                               "Nếu cần, thêm `streamlit-autorefresh` vào requirements.txt.")
+                    if st.button("🔄 Refresh ngay", key="wc_manual_refresh_btn"):
+                        st.rerun()
 
-            # ✅ LIVE UPDATE: tự rerun để lấy dữ liệu mới (không cần bạn reload thủ công)
-            # interval (ms) có thể giảm xuống 800-1200 nếu muốn "real-time" hơn
-            st.autorefresh(interval=1500, key="wc_live_refresh")
+            # Fullscreen nút riêng (đúng yêu cầu)
+            col_a, col_b = st.columns([1, 1])
+            with col_a:
+                if st.button("🖥️ Fullscreen Wordcloud", key="btn_wc_fullscreen"):
+                    st.session_state["wc_fullscreen"] = True
+            with col_b:
+                show_table = st.toggle("Hiện bảng Top từ", value=False, key="wc_show_table")
 
+            st.markdown("##### ☁️ KẾT QUẢ")
             df = load_data(cid, current_act_key)
 
-            with st.container(border=True):
-                if df.empty:
-                    st.info("Chưa có dữ liệu. Mời lớp nhập từ khóa.")
-                else:
-                    import re, json
+            import re, json
 
-                    def normalize_phrase(s: str) -> str:
-                        s = str(s or "").strip().lower()
-                        s = re.sub(r"\s+", " ", s)
-                        s = s.strip(" .,:;!?\"'`()[]{}<>|\\/+-=*#@~^_")
-                        return s
+            def normalize_phrase(s: str) -> str:
+                s = str(s or "").strip().lower()
+                s = re.sub(r"\s+", " ", s)
+                s = s.strip(" .,:;!?\"'`()[]{}<>|\\/+-=*#@~^_")
+                return s
 
-                    # 1) Đếm theo SỐ NGƯỜI (unique học viên) cho mỗi phrase
-                    tmp = df[["Học viên", "Nội dung"]].dropna().copy()
-                    tmp["Học viên"] = tmp["Học viên"].astype(str).str.strip()
-                    tmp["phrase"] = tmp["Nội dung"].astype(str).apply(normalize_phrase)
-                    tmp = tmp[(tmp["Học viên"] != "") & (tmp["phrase"] != "")]
-                    tmp = tmp.drop_duplicates(subset=["Học viên", "phrase"])
+            # build freq by UNIQUE PEOPLE per phrase
+            tmp = df[["Học viên", "Nội dung"]].dropna().copy()
+            tmp["Học viên"] = tmp["Học viên"].astype(str).str.strip()
+            tmp["phrase"] = tmp["Nội dung"].astype(str).apply(normalize_phrase)
+            tmp = tmp[(tmp["Học viên"] != "") & (tmp["phrase"] != "")]
+            tmp = tmp.drop_duplicates(subset=["Học viên", "phrase"])
 
-                    freq = tmp["phrase"].value_counts().to_dict()
+            freq = tmp["phrase"].value_counts().to_dict()
 
-                    if not freq:
-                        st.info("Chưa có từ/cụm hợp lệ sau khi chuẩn hoá.")
-                    else:
-                        MAX_WORDS_SHOW = 80
-                        items = sorted(freq.items(), key=lambda x: x[1], reverse=True)[:MAX_WORDS_SHOW]
-                        words_payload = [{"text": k, "value": int(v)} for k, v in items]
-                        words_json = json.dumps(words_payload, ensure_ascii=False)
+            total_answers = int(df["Nội dung"].dropna().shape[0])
+            total_people = int(tmp["Học viên"].nunique())
+            total_unique_phrases = int(len(freq))
 
-                        total_answers = int(df["Nội dung"].dropna().shape[0])
-                        total_people = int(tmp["Học viên"].nunique())
-                        total_unique_phrases = int(len(freq))
-
-                        # ✅ HTML Word Cloud: center by bounding box, stable random, no quadrant drift
-                        comp_html = """
+            def build_wc_html(words_json: str, height: int = 540) -> str:
+                # NOTE: center by bounding box of placed words => always centered, not drifting quadrant
+                comp_html = f"""
 <!doctype html>
 <html>
 <head>
   <meta charset="utf-8"/>
   <style>
-    body { margin:0; background:white; }
-    #wc-wrap {
+    body {{ margin:0; background:white; }}
+    #wc-wrap {{
       width: 100%;
-      height: 520px;
+      height: {height}px;
       border-radius: 12px;
       background: #ffffff;
       overflow: hidden;
-    }
-    svg { width:100%; height:100%; display:block; }
-    .word {
+    }}
+    svg {{ width:100%; height:100%; display:block; }}
+    .word {{
       font-family: 'Montserrat', system-ui, -apple-system, Segoe UI, Roboto, Arial, sans-serif;
       font-weight: 800;
       cursor: default;
       user-select: none;
-    }
+    }}
   </style>
 </head>
 <body>
@@ -610,92 +623,89 @@ def render_activity():
   <script src="https://cdn.jsdelivr.net/npm/d3@7/dist/d3.min.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/d3-cloud@1/build/d3.layout.cloud.js"></script>
   <script>
-    const data = __WORDS_JSON__;
+    const data = {words_json};
 
     const wrap = document.getElementById("wc-wrap");
     const W = wrap.clientWidth || 900;
-    const H = wrap.clientHeight || 520;
+    const H = wrap.clientHeight || {height};
 
-    // Stable RNG for layout stability (less jumping)
-    function mulberry32(a) {
-      return function() {
+    function mulberry32(a) {{
+      return function() {{
         var t = a += 0x6D2B79F5;
         t = Math.imul(t ^ t >>> 15, t | 1);
         t ^= t + Math.imul(t ^ t >>> 7, t | 61);
         return ((t ^ t >>> 14) >>> 0) / 4294967296;
-      }
-    }
+      }}
+    }}
     const rng = mulberry32(42);
 
-    // Log scale for font sizes. vmax==vmin => all same size.
     const vals = data.map(d => d.value);
     const vmin = Math.max(1, d3.min(vals));
     const vmax = Math.max(1, d3.max(vals));
 
     let fontScale;
-    if (vmax === vmin) {
-      fontScale = () => 64; // tất cả cùng 1 vote => cùng size
-    } else {
+    if (vmax === vmin) {{
+      fontScale = () => 64; // all same size when all = 1
+    }} else {{
       fontScale = d3.scaleLog()
         .domain([vmin, vmax])
         .range([28, 110])
         .clamp(true);
-    }
+    }}
 
-    // Orientation: 70% horizontal, 30% vertical (-90)
-    function rotateFn() {
+    function rotateFn() {{
       return (rng() < 0.70) ? 0 : -90;
-    }
+    }}
 
-    // Vibrant color using golden ratio hue
     const GOLDEN_RATIO = 0.61803398875;
     let hue = 0.12;
 
-    function nextColor(prevHue) {
+    function nextColor(prevHue) {{
       hue = (hue + GOLDEN_RATIO) % 1.0;
       let h = hue * 360;
-
-      if (prevHue !== null) {
+      if (prevHue !== null) {{
         const diff = Math.abs(h - prevHue);
         if (diff < 22) h = (h + 35) % 360;
-      }
-      return { color: `hsl(${h}, 85%, 52%)`, hue: h };
-    }
+      }}
+      return {{ color: `hsl(${{h}}, 85%, 52%)`, hue: h }};
+    }}
 
     const words = data
       .slice()
       .sort((a,b) => d3.descending(a.value, b.value))
-      .map(d => ({
-        text: d.text,
-        value: d.value,
-        size: Math.round(fontScale(d.value)),
-        rotate: rotateFn(),
-        __key: d.text
-      }));
+      .map(d => {{
+        const v = Math.max(1, +d.value || 1);
+        return {{
+          text: d.text,
+          value: v,
+          size: Math.round(fontScale(v)),
+          rotate: rotateFn(),
+          __key: d.text
+        }};
+      }});
 
     const svg = d3.select("#wc-wrap").append("svg")
-      .attr("viewBox", `0 0 ${W} ${H}`);
+      .attr("viewBox", `0 0 ${{W}} ${{H}}`);
 
     const g = svg.append("g")
-      .attr("transform", `translate(${W/2},${H/2})`);
+      .attr("transform", `translate(${{W/2}},${{H/2}})`);
 
-    // Keep previous positions for smooth transitions
     const prev = new Map();
-    try {
+    try {{
       const saved = sessionStorage.getItem("wc_prev");
-      if (saved) {
+      if (saved) {{
         const obj = JSON.parse(saved);
         Object.keys(obj).forEach(k => prev.set(k, obj[k]));
-      }
-    } catch(e) {}
+      }}
+    }} catch(e) {{}}
 
-    function savePrev(map) {
-      try {
-        const obj = {};
+    function savePrev(map) {{
+      try {{
+        const obj = {{}};
         map.forEach((v,k)=> obj[k]=v);
         sessionStorage.setItem("wc_prev", JSON.stringify(obj));
-      } catch(e) {}
-    }
+      }} catch(e) {{}}
+    }}
 
     const layout = d3.layout.cloud()
       .size([W, H])
@@ -710,46 +720,40 @@ def render_activity():
     layout.on("end", draw);
     layout.start();
 
-    function draw(placed) {
-      // ✅ CENTER BY BOUNDING BOX (không bị dạt 1 góc)
-      // d3-cloud provides width/height; use them to compute bounds
+    function draw(placed) {{
+      // center by bounding box to avoid drifting into one quadrant
       let minX = Infinity, maxX = -Infinity, minY = Infinity, maxY = -Infinity;
 
-      placed.forEach(w => {
-        const ww = (w.width || 0);
-        const hh = (w.height || 0);
-        const x0 = w.x - ww/2;
-        const x1 = w.x + ww/2;
-        const y0 = w.y - hh/2;
-        const y1 = w.y + hh/2;
-        if (x0 < minX) minX = x0;
-        if (x1 > maxX) maxX = x1;
-        if (y0 < minY) minY = y0;
-        if (y1 > maxY) maxY = y1;
-      });
+      placed.forEach(w => {{
+        const ww = w.width || 0;
+        const hh = w.height || 0;
+        minX = Math.min(minX, w.x - ww/2);
+        maxX = Math.max(maxX, w.x + ww/2);
+        minY = Math.min(minY, w.y - hh/2);
+        maxY = Math.max(maxY, w.y + hh/2);
+      }});
 
       const cx = (minX + maxX) / 2;
       const cy = (minY + maxY) / 2;
 
-      placed.forEach(w => {
+      placed.forEach(w => {{
         w.x = w.x - cx;
         w.y = w.y - cy;
-      });
+      }});
 
-      // Colors with stability
       let prevHue = null;
       const colorMap = new Map();
-      placed.forEach(w => {
+      placed.forEach(w => {{
         const p = prev.get(w.__key);
-        if (p && p.color) {
+        if (p && p.color) {{
           colorMap.set(w.__key, p.color);
           prevHue = (p.hue !== undefined && p.hue !== null) ? p.hue : prevHue;
-        } else {
+        }} else {{
           const c = nextColor(prevHue);
           colorMap.set(w.__key, c);
           prevHue = c.hue;
-        }
-      });
+        }}
+      }});
 
       const sel = g.selectAll("text.word")
         .data(placed, d => d.__key);
@@ -767,7 +771,7 @@ def render_activity():
 
       const merged = enter.merge(sel);
 
-      merged.each(function(d) {
+      merged.each(function(d) {{
         const node = d3.select(this);
         const p = prev.get(d.__key);
 
@@ -780,47 +784,83 @@ def render_activity():
         const col = (c && c.color) ? c.color : c;
 
         node
-          .attr("transform", `translate(${x0},${y0}) rotate(${r0})`)
+          .attr("transform", `translate(${{x0}},${{y0}}) rotate(${{r0}})`)
           .style("fill", col)
-          .style("font-size", `${s0}px`);
-      });
+          .style("font-size", `${{s0}}px`);
+      }});
 
       merged.transition()
         .duration(800)
         .ease(d3.easeCubicOut)
         .style("opacity", 1)
-        .attr("transform", d => `translate(${d.x},${d.y}) rotate(${d.rotate})`)
-        .style("font-size", d => `${d.size}px`);
+        .attr("transform", d => `translate(${{d.x}},${{d.y}}) rotate(${{d.rotate}})`)
+        .style("font-size", d => `${{d.size}}px`);
 
       const nextPrev = new Map();
-      placed.forEach(d => {
+      placed.forEach(d => {{
         const c = colorMap.get(d.__key);
-        if (c && c.color) {
-          nextPrev.set(d.__key, {x:d.x, y:d.y, rotate:d.rotate, size:d.size, color:c, hue:c.hue});
-        } else {
-          nextPrev.set(d.__key, {x:d.x, y:d.y, rotate:d.rotate, size:d.size, color:c});
-        }
-      });
+        if (c && c.color) {{
+          nextPrev.set(d.__key, {{x:d.x, y:d.y, rotate:d.rotate, size:d.size, color:c, hue:c.hue}});
+        }} else {{
+          nextPrev.set(d.__key, {{x:d.x, y:d.y, rotate:d.rotate, size:d.size, color:c}});
+        }}
+      }});
       savePrev(nextPrev);
-    }
+    }}
   </script>
 </body>
 </html>
 """
-                        comp_html = comp_html.replace("__WORDS_JSON__", words_json)
+                return comp_html
 
-                        # ✅ Đây là element chính: bấm FULLSCREEN sẽ phóng to WORDCLOUD
-                        st.components.v1.html(comp_html, height=540, scrolling=False)
+            # MAIN RENDER
+            with st.container(border=True):
+                if not freq:
+                    st.info("Chưa có dữ liệu. Mời lớp nhập từ khóa.")
+                else:
+                    MAX_WORDS_SHOW = 80
+                    items = sorted(freq.items(), key=lambda x: x[1], reverse=True)[:MAX_WORDS_SHOW]
+                    words_payload = [{"text": k, "value": int(v)} for k, v in items]
+                    words_json = json.dumps(words_payload, ensure_ascii=False)
 
-                        # ✅ FIX INDENT: caption và bảng phải nằm đúng cấp, không thụt bừa
+                    # render wordcloud (main)
+                    html_main = build_wc_html(words_json=words_json, height=520)
+                    st.components.v1.html(html_main, height=540, scrolling=False)
+
+            # caption + stats (đặt đúng indentation, không còn lỗi unexpected indent)
+            st.caption(
+                f"👥 Lượt gửi: **{total_answers}** • 👤 Người tham gia (unique): **{total_people}** • 🧩 Cụm duy nhất: **{total_unique_phrases}**"
+            )
+
+            # bảng top từ: chuyển sang toggle/expander để fullscreen không “bị dính bảng”
+            if freq and show_table:
+                topk = pd.DataFrame(items[:20], columns=["Từ/cụm (chuẩn hoá)", "Số người nhập"])
+                st.dataframe(topk, use_container_width=True, hide_index=True)
+
+            # FULLSCREEN DIALOG: chỉ phóng to wordcloud
+            if st.session_state.get("wc_fullscreen", False):
+                with st.dialog("🖥️ Fullscreen Wordcloud", width="large"):
+                    # (đúng yêu cầu) ít nhất khi fullscreen thì live update chạy
+                    if st_autorefresh is not None:
+                        st_autorefresh(interval=1500, key="wc_live_refresh_dialog")
+                    else:
+                        if st.button("🔄 Refresh ngay", key="wc_refresh_dialog"):
+                            st.rerun()
+
+                    if not freq:
+                        st.info("Chưa có dữ liệu.")
+                    else:
+                        # render lớn hơn
+                        html_big = build_wc_html(words_json=words_json, height=760)
+                        st.components.v1.html(html_big, height=780, scrolling=False)
+
                         st.caption(
-                            f"👥 Lượt gửi: **{total_answers}** • 👤 Người tham gia (unique): **{total_people}** • 🧩 Cụm duy nhất: **{total_unique_phrases}**"
+                            f"👥 Lượt gửi: **{total_answers}** • 👤 Unique: **{total_people}** • 🧩 Unique phrases: **{total_unique_phrases}**"
                         )
 
-                        # ✅ Đưa bảng vào expander để nút fullscreen không còn “ưu tiên” bảng dữ liệu
-                        with st.expander("📋 Xem danh sách chuẩn hoá (Top 20)", expanded=False):
-                            topk = pd.DataFrame(items[:20], columns=["Từ/cụm (chuẩn hoá)", "Số người nhập"])
-                            st.dataframe(topk, use_container_width=True, hide_index=True)
+                    if st.button("✖️ Đóng fullscreen", key="wc_close_dialog"):
+                        st.session_state["wc_fullscreen"] = False
+                        st.rerun()
 
     # ------------------------------------------
     # 2) POLL
