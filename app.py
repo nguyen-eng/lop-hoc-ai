@@ -555,7 +555,7 @@ def render_activity():
                     freq_dict = Counter(clean_text)
 
                     # 2. HÀM MÀU SẮC MENTIMETER
-                    def menti_color_func(word, font_size, position, orientation, random_state=None, **kwargs):
+                def menti_color_func(word, font_size, position, orientation, random_state=None, **kwargs):
                         colors = ["#00a0b0", "#cc333f", "#eb6841", "#edc951", "#6a4a3c", "#3e9fa8", "#e94e77"] 
                         return random.choice(colors)
 
