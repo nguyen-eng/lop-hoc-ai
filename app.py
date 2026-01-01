@@ -821,9 +821,6 @@ if act == "wordcloud":
                     # (Tuỳ chọn) bảng top để kiểm chứng tần suất theo số người
                     topk = pd.DataFrame(items[:20], columns=["Từ/cụm (chuẩn hoá)", "Số người nhập"])
                     st.dataframe(topk, use_container_width=True, hide_index=True)
-
-
- 
     # ------------------------------------------
     # 2) POLL
     # ------------------------------------------
