@@ -710,7 +710,7 @@ def render_activity():
       const top = placed[0];
       const dx = top ? -top.x : 0;
       const dy = top ? -top.y : 0;
-      placed نشان.map(w => {{
+      placed.forEach(w => {
         w.x = w.x + dx;
         w.y = w.y + dy;
       }});
