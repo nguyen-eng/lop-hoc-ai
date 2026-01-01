@@ -549,58 +549,63 @@ def render_activity():
                     # Lấy list nội dung, loại bỏ dòng trống
                     text_data = df["Nội dung"].dropna().astype(str).tolist()
                     # Chuẩn hóa: cắt khoảng trắng thừa (giữ nguyên hoa/thường để tôn trọng người nhập)
-                    clean_text = [t.strip() for t in text_data if t.strip()]
-                    
-                    # Đếm tần suất (quan trọng: đếm theo cụm phrase)
-                    freq_dict = Counter(clean_text)
+# [Dán đè vào từ dòng 552 trở đi]
+                
+                # 1. XỬ LÝ DỮ LIỆU
+                # Chuẩn hoá: cắt khoảng trắng thừa
+                clean_text = [t.strip() for t in text_data if t.strip()]
+                
+                # Đếm tần suất
+                freq_dict = Counter(clean_text)
 
-                    # 2. HÀM MÀU SẮC MENTIMETER
+                # 2. HÀM MÀU SẮC MENTIMETER
+                # Lưu ý: Hàm này phải nằm thụt vào trong cùng cấp với các biến bên trên
+                import random
                 def menti_color_func(word, font_size, position, orientation, random_state=None, **kwargs):
-                        colors = ["#00a0b0", "#cc333f", "#eb6841", "#edc951", "#6a4a3c", "#3e9fa8", "#e94e77"] 
-                        return random.choice(colors)
+                    colors = ["#00a0b0", "#cc333f", "#eb6841", "#edc951", "#6a4a3c", "#3e9fa8", "#e94e77"]
+                    return random.choice(colors)
 
-                    # 3. CẤU HÌNH WORDCLOUD
-                    # Cố gắng load font đẹp (Montserrat), nếu không có thì dùng mặc định
-                    font_path_use = None
-                    # Kiểm tra các đường dẫn font có thể có
-                    possible_fonts = [
-                        "assets/fonts/Montserrat-Bold.ttf", 
-                        "assets/fonts/Montserrat-SemiBold.ttf",
-                        "arial.ttf",
-                        "Roboto-Bold.ttf"
-                    ]
-                    for f in possible_fonts:
-                        if os.path.exists(f):
-                            font_path_use = f
-                            break
-                    
-                    wc = WordCloud(
-                        font_path=font_path_use,      # Dùng font tìm thấy (hoặc None)
-                        width=1200, 
-                        height=650,
-                        background_color="white",     # Nền trắng sạch
-                        max_words=100,                # Số từ tối đa
-                        prefer_horizontal=1.0,        # 100% nằm ngang (Giống Mentimeter)
-                        relative_scaling=0.5,         # Tỷ lệ kích thước chữ theo tần suất (0.5 là cân đối)
-                        min_font_size=14,             
-                        color_func=menti_color_func,  # Áp dụng bảng màu
-                        collocations=False,           # Tắt chế độ tự tách từ (để giữ cụm "An ninh mạng")
-                        margin=5                      # Khoảng cách giữa các chữ
-                    )
+                # 3. CẤU HÌNH WORDCLOUD
+                # Kiểm tra font
+                font_path_use = None
+                possible_fonts = [
+                    "assets/fonts/Montserrat-Bold.ttf",
+                    "assets/fonts/Montserrat-SemiBold.ttf",
+                    "arial.ttf",
+                    "Roboto-Bold.ttf"
+                ]
+                
+                for f in possible_fonts:
+                    if os.path.exists(f):
+                        font_path_use = f
+                        break
+                
+                # Tạo WordCloud
+                wc = WordCloud(
+                    font_path=font_path_use,
+                    width=1200, 
+                    height=650,
+                    background_color="white",
+                    max_words=100,
+                    prefer_horizontal=1.0,
+                    relative_scaling=0.5,
+                    min_font_size=14,             
+                    color_func=menti_color_func,  # Gọi hàm màu đã định nghĩa ở trên
+                    collocations=False,
+                    margin=5
+                )
 
-                    # Tạo wordcloud từ dict tần suất
-                    wc.generate_from_frequencies(freq_dict)
+                wc.generate_from_frequencies(freq_dict)
 
-                    # 4. HIỂN THỊ BẰNG MATPLOTLIB (Sắc nét hơn PIL thủ công)
-                    fig, ax = plt.subplots(figsize=(10, 6))
-                    ax.imshow(wc, interpolation="bilinear") # Bilinear làm mượt mép chữ
-                    ax.axis("off")
-                    plt.tight_layout(pad=0)
-                    
-                    st.pyplot(fig)
-
-                    # Thống kê nhỏ bên dưới
-                    st.caption(f"👥 Lượt trả lời: **{len(text_data)}** • 🧩 Số cụm từ duy nhất: **{len(freq_dict)}**")
+                # 4. HIỂN THỊ
+                fig, ax = plt.subplots(figsize=(10, 6))
+                ax.imshow(wc, interpolation="bilinear")
+                ax.axis("off")
+                plt.tight_layout(pad=0)
+                
+                st.pyplot(fig)
+                st.caption(f"👥 Lượt trả lời: **{len(text_data)}** • 🧩 Số cụm từ duy nhất: **{len(freq_dict)}**")
+                
     # ------------------------------------------
     # 2) POLL
     # ------------------------------------------
