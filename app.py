@@ -14,7 +14,7 @@ from collections import Counter
 from io import BytesIO
 import random  # Import random ở đầu file để tránh lỗi thiếu thư viện
 
-# --- LIVE REFRESH (fix lỗi st.autorefresh không tồn tại) ---
+# ✅ Live refresh (thay cho st.autorefresh)
 try:
     from streamlit_autorefresh import st_autorefresh
 except Exception:
@@ -187,6 +187,23 @@ st.markdown(f"""
         font-weight: 600;
         font-size: 13px;
     }}
+
+    /* ✅ Nút fullscreen riêng (không dùng toolbar dataframe) */
+    .wc-toolbar {{
+        display:flex;
+        align-items:center;
+        justify-content:space-between;
+        gap:10px;
+        margin: 6px 0 10px 0;
+        padding: 8px 10px;
+        border: 1px solid #e2e8f0;
+        border-radius: 12px;
+        background: #fff;
+    }}
+    .wc-toolbar small {{
+        color: {MUTED};
+        font-weight: 700;
+    }}
 </style>
 """, unsafe_allow_html=True)
 
@@ -195,7 +212,7 @@ try:
     api_key = st.secrets["GEMINI_API_KEY"]
     genai.configure(api_key=api_key)
     model = genai.GenerativeModel('gemini-2.5-flash')
-except:
+except Exception:
     model = None
 
 # ==========================================
@@ -218,11 +235,11 @@ if "logged_in" not in st.session_state:
 if "page" not in st.session_state:
     st.session_state["page"] = "login"
 
-# which activity: wordcloud/poll/openended/scales/ranking/pin
+# which activity
 if "current_act_key" not in st.session_state:
     st.session_state["current_act_key"] = "dashboard"
 
-# fullscreen flag
+# ✅ fullscreen state
 if "wc_fullscreen" not in st.session_state:
     st.session_state["wc_fullscreen"] = False
 
@@ -242,7 +259,7 @@ def load_data(cls, act):
     if os.path.exists(path):
         try:
             return pd.read_csv(path, sep="|", names=["Học viên", "Nội dung", "Thời gian"])
-        except:
+        except Exception:
             return pd.DataFrame(columns=["Học viên", "Nội dung", "Thời gian"])
     return pd.DataFrame(columns=["Học viên", "Nội dung", "Thời gian"])
 
@@ -363,7 +380,7 @@ if (not st.session_state.get("logged_in", False)) or (st.session_state.get("page
 
     with tab_sv:
         c_class = st.selectbox("Chọn lớp", list(CLASSES.keys()))
-        c_pass = st.text_input("Mã lớp", type="password")  # ✅ bỏ placeholder để không lộ gợi ý
+        c_pass = st.text_input("Mã lớp", type="password")
         if st.button("THAM GIA LỚP HỌC", key="btn_join"):
             cid = CLASSES[c_class]
             if c_pass.strip() == PASSWORDS[cid]:
@@ -524,7 +541,7 @@ def render_activity():
     current_act_key = act
 
     # ------------------------------------------
-    # 1) WORD CLOUD (Mentimeter-like)
+    # 1) WORD CLOUD
     # ------------------------------------------
     if act == "wordcloud":
         c1, c2 = st.columns([1, 2])
@@ -549,24 +566,23 @@ def render_activity():
 
         # --- CỘT PHẢI: HIỂN THỊ KẾT QUẢ ---
         with c2:
-            # Live update (không crash nếu thiếu lib)
-            live = st.toggle("🔴 Live update (1.5s)", value=True, key="wc_live_toggle")
+            # ✅ Live update toggle + Fullscreen button + show table toggle
+            tcol1, tcol2, tcol3 = st.columns([2, 2, 2])
+            with tcol1:
+                live = st.toggle("🔴 Live update (1.5s)", value=True, key="wc_live_toggle")
+            with tcol2:
+                if st.button("🖥 Fullscreen Wordcloud", key="wc_btn_full"):
+                    st.session_state["wc_fullscreen"] = True
+                    st.rerun()
+            with tcol3:
+                show_table = st.toggle("Hiện bảng Top từ", value=False, key="wc_show_table")
+
+            # ✅ Auto refresh (thay st.autorefresh)
             if live:
                 if st_autorefresh is not None:
                     st_autorefresh(interval=1500, key="wc_live_refresh")
                 else:
-                    st.warning("Chưa có thư viện streamlit-autorefresh → Live update tự động chưa hoạt động. "
-                               "Nếu cần, thêm `streamlit-autorefresh` vào requirements.txt.")
-                    if st.button("🔄 Refresh ngay", key="wc_manual_refresh_btn"):
-                        st.rerun()
-
-            # Fullscreen nút riêng (đúng yêu cầu)
-            col_a, col_b = st.columns([1, 1])
-            with col_a:
-                if st.button("🖥️ Fullscreen Wordcloud", key="btn_wc_fullscreen"):
-                    st.session_state["wc_fullscreen"] = True
-            with col_b:
-                show_table = st.toggle("Hiện bảng Top từ", value=False, key="wc_show_table")
+                    st.warning("Thiếu gói streamlit-autorefresh. Thêm vào requirements.txt: streamlit-autorefresh")
 
             st.markdown("##### ☁️ KẾT QUẢ")
             df = load_data(cid, current_act_key)
@@ -579,21 +595,20 @@ def render_activity():
                 s = s.strip(" .,:;!?\"'`()[]{}<>|\\/+-=*#@~^_")
                 return s
 
-            # build freq by UNIQUE PEOPLE per phrase
+            # 1) Đếm theo SỐ NGƯỜI (unique học viên) cho mỗi phrase
             tmp = df[["Học viên", "Nội dung"]].dropna().copy()
             tmp["Học viên"] = tmp["Học viên"].astype(str).str.strip()
             tmp["phrase"] = tmp["Nội dung"].astype(str).apply(normalize_phrase)
             tmp = tmp[(tmp["Học viên"] != "") & (tmp["phrase"] != "")]
             tmp = tmp.drop_duplicates(subset=["Học viên", "phrase"])
-
             freq = tmp["phrase"].value_counts().to_dict()
 
-            total_answers = int(df["Nội dung"].dropna().shape[0])
-            total_people = int(tmp["Học viên"].nunique())
-            total_unique_phrases = int(len(freq))
+            total_answers = int(df["Nội dung"].dropna().shape[0]) if not df.empty else 0
+            total_people = int(tmp["Học viên"].nunique()) if not tmp.empty else 0
+            total_unique_phrases = int(len(freq)) if freq else 0
 
-            def build_wc_html(words_json: str, height: int = 540) -> str:
-                # NOTE: center by bounding box of placed words => always centered, not drifting quadrant
+            def build_wordcloud_html(words_json: str, height_px: int = 520) -> str:
+                # ✅ bbox-centering: luôn đưa khối chữ về tâm canvas, không lệch góc
                 comp_html = f"""
 <!doctype html>
 <html>
@@ -603,7 +618,7 @@ def render_activity():
     body {{ margin:0; background:white; }}
     #wc-wrap {{
       width: 100%;
-      height: {height}px;
+      height: {height_px}px;
       border-radius: 12px;
       background: #ffffff;
       overflow: hidden;
@@ -627,7 +642,7 @@ def render_activity():
 
     const wrap = document.getElementById("wc-wrap");
     const W = wrap.clientWidth || 900;
-    const H = wrap.clientHeight || {height};
+    const H = wrap.clientHeight || {height_px};
 
     function mulberry32(a) {{
       return function() {{
@@ -645,7 +660,7 @@ def render_activity():
 
     let fontScale;
     if (vmax === vmin) {{
-      fontScale = () => 64; // all same size when all = 1
+      fontScale = () => 64; // tất cả 1 vote => cùng size
     }} else {{
       fontScale = d3.scaleLog()
         .domain([vmin, vmax])
@@ -659,7 +674,6 @@ def render_activity():
 
     const GOLDEN_RATIO = 0.61803398875;
     let hue = 0.12;
-
     function nextColor(prevHue) {{
       hue = (hue + GOLDEN_RATIO) % 1.0;
       let h = hue * 360;
@@ -673,16 +687,13 @@ def render_activity():
     const words = data
       .slice()
       .sort((a,b) => d3.descending(a.value, b.value))
-      .map(d => {{
-        const v = Math.max(1, +d.value || 1);
-        return {{
-          text: d.text,
-          value: v,
-          size: Math.round(fontScale(v)),
-          rotate: rotateFn(),
-          __key: d.text
-        }};
-      }});
+      .map(d => ({{
+        text: d.text,
+        value: d.value,
+        size: Math.round(fontScale(d.value)),
+        rotate: rotateFn(),
+        __key: d.text
+      }}));
 
     const svg = d3.select("#wc-wrap").append("svg")
       .attr("viewBox", `0 0 ${{W}} ${{H}}`);
@@ -690,6 +701,7 @@ def render_activity():
     const g = svg.append("g")
       .attr("transform", `translate(${{W/2}},${{H/2}})`);
 
+    // keep previous positions for smoother transitions
     const prev = new Map();
     try {{
       const saved = sessionStorage.getItem("wc_prev");
@@ -721,16 +733,20 @@ def render_activity():
     layout.start();
 
     function draw(placed) {{
-      // center by bounding box to avoid drifting into one quadrant
-      let minX = Infinity, maxX = -Infinity, minY = Infinity, maxY = -Infinity;
+      if (!placed || placed.length === 0) return;
 
+      // ✅ bbox centering (fix lệch về 1 góc phần tư)
+      let minX = Infinity, maxX = -Infinity, minY = Infinity, maxY = -Infinity;
       placed.forEach(w => {{
-        const ww = w.width || 0;
-        const hh = w.height || 0;
-        minX = Math.min(minX, w.x - ww/2);
-        maxX = Math.max(maxX, w.x + ww/2);
-        minY = Math.min(minY, w.y - hh/2);
-        maxY = Math.max(maxY, w.y + hh/2);
+        // w.x, w.y là tâm; w.width/height có sẵn từ d3-cloud
+        const x0 = w.x - (w.width  || 0)/2;
+        const x1 = w.x + (w.width  || 0)/2;
+        const y0 = w.y - (w.height || 0)/2;
+        const y1 = w.y + (w.height || 0)/2;
+        if (x0 < minX) minX = x0;
+        if (x1 > maxX) maxX = x1;
+        if (y0 < minY) minY = y0;
+        if (y1 > maxY) maxY = y1;
       }});
 
       const cx = (minX + maxX) / 2;
@@ -741,6 +757,7 @@ def render_activity():
         w.y = w.y - cy;
       }});
 
+      // Colors stability
       let prevHue = null;
       const colorMap = new Map();
       placed.forEach(w => {{
@@ -759,7 +776,7 @@ def render_activity():
         .data(placed, d => d.__key);
 
       sel.exit()
-        .transition().duration(350)
+        .transition().duration(250)
         .style("opacity", 0)
         .remove();
 
@@ -790,7 +807,7 @@ def render_activity():
       }});
 
       merged.transition()
-        .duration(800)
+        .duration(650)
         .ease(d3.easeCubicOut)
         .style("opacity", 1)
         .attr("transform", d => `translate(${{d.x}},${{d.y}}) rotate(${{d.rotate}})`)
@@ -813,7 +830,7 @@ def render_activity():
 """
                 return comp_html
 
-            # MAIN RENDER
+            # --- Normal view container
             with st.container(border=True):
                 if not freq:
                     st.info("Chưa có dữ liệu. Mời lớp nhập từ khóa.")
@@ -823,42 +840,38 @@ def render_activity():
                     words_payload = [{"text": k, "value": int(v)} for k, v in items]
                     words_json = json.dumps(words_payload, ensure_ascii=False)
 
-                    # render wordcloud (main)
-                    html_main = build_wc_html(words_json=words_json, height=520)
-                    st.components.v1.html(html_main, height=540, scrolling=False)
+                    wc_html = build_wordcloud_html(words_json, height_px=520)
+                    st.components.v1.html(wc_html, height=540, scrolling=False)
 
-            # caption + stats (đặt đúng indentation, không còn lỗi unexpected indent)
+            # ✅ caption phải cùng block indentation (đã sửa)
             st.caption(
                 f"👥 Lượt gửi: **{total_answers}** • 👤 Người tham gia (unique): **{total_people}** • 🧩 Cụm duy nhất: **{total_unique_phrases}**"
             )
 
-            # bảng top từ: chuyển sang toggle/expander để fullscreen không “bị dính bảng”
-            if freq and show_table:
+            if show_table and freq:
                 topk = pd.DataFrame(items[:20], columns=["Từ/cụm (chuẩn hoá)", "Số người nhập"])
                 st.dataframe(topk, use_container_width=True, hide_index=True)
 
-            # FULLSCREEN DIALOG: chỉ phóng to wordcloud
+            # ✅ Fullscreen overlay (không dùng toolbar dataframe)
             if st.session_state.get("wc_fullscreen", False):
-                with st.dialog("🖥️ Fullscreen Wordcloud", width="large"):
-                    # (đúng yêu cầu) ít nhất khi fullscreen thì live update chạy
-                    if st_autorefresh is not None:
-                        st_autorefresh(interval=1500, key="wc_live_refresh_dialog")
-                    else:
-                        if st.button("🔄 Refresh ngay", key="wc_refresh_dialog"):
-                            st.rerun()
+                with st.modal("🖥 Fullscreen Wordcloud"):
+                    # Fullscreen cũng live update (nếu bật)
+                    if live and st_autorefresh is not None:
+                        st_autorefresh(interval=1500, key="wc_live_refresh_modal")
 
                     if not freq:
-                        st.info("Chưa có dữ liệu.")
+                        st.info("Chưa có dữ liệu. Mời lớp nhập từ khóa.")
                     else:
-                        # render lớn hơn
-                        html_big = build_wc_html(words_json=words_json, height=760)
-                        st.components.v1.html(html_big, height=780, scrolling=False)
+                        # lớn hơn để phóng to
+                        MAX_WORDS_SHOW = 120
+                        items_fs = sorted(freq.items(), key=lambda x: x[1], reverse=True)[:MAX_WORDS_SHOW]
+                        words_payload_fs = [{"text": k, "value": int(v)} for k, v in items_fs]
+                        words_json_fs = json.dumps(words_payload_fs, ensure_ascii=False)
 
-                        st.caption(
-                            f"👥 Lượt gửi: **{total_answers}** • 👤 Unique: **{total_people}** • 🧩 Unique phrases: **{total_unique_phrases}**"
-                        )
+                        wc_html_fs = build_wordcloud_html(words_json_fs, height_px=720)
+                        st.components.v1.html(wc_html_fs, height=760, scrolling=False)
 
-                    if st.button("✖️ Đóng fullscreen", key="wc_close_dialog"):
+                    if st.button("ĐÓNG FULLSCREEN", key="wc_close_full"):
                         st.session_state["wc_fullscreen"] = False
                         st.rerun()
 
@@ -967,7 +980,7 @@ def render_activity():
                         ))
                         fig.update_layout(polar=dict(radialaxis=dict(visible=True, range=[0, 5])), showlegend=False)
                         st.plotly_chart(fig, use_container_width=True)
-                    except:
+                    except Exception:
                         st.error("Dữ liệu lỗi định dạng.")
                 else:
                     st.info("Chưa có dữ liệu thang đo.")
@@ -1066,7 +1079,7 @@ def render_activity():
                             width=700, height=420, margin=dict(l=0, r=0, t=0, b=0)
                         )
                         st.plotly_chart(fig, use_container_width=True)
-                    except:
+                    except Exception:
                         st.error("Lỗi dữ liệu ghim.")
                 else:
                     st.info("Chưa có ghim nào.")
