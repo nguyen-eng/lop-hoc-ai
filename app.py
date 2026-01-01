@@ -19,7 +19,39 @@ try:
     from streamlit_autorefresh import st_autorefresh
 except Exception:
     st_autorefresh = None
+# ✅ Helper mở "fullscreen" tương thích nhiều phiên bản Streamlit
+_DIALOG_DECORATOR = getattr(st, "dialog", None) or getattr(st, "experimental_dialog", None)
 
+def open_wc_fullscreen_dialog(wc_html_fs: str, live: bool):
+    """Mở dialog fullscreen cho wordcloud (tương thích Streamlit cũ/mới)."""
+
+    # Nếu có dialog/experimental_dialog thì dùng đúng chuẩn decorator
+    if _DIALOG_DECORATOR is not None:
+        @_DIALOG_DECORATOR("🖥 Fullscreen Wordcloud")
+        def _inner():
+            # Live update trong fullscreen
+            if live and st_autorefresh is not None:
+                st_autorefresh(interval=1500, key="wc_live_refresh_modal")
+
+            st.components.v1.html(wc_html_fs, height=760, scrolling=False)
+
+            if st.button("ĐÓNG FULLSCREEN", key="wc_close_full"):
+                st.session_state["wc_fullscreen"] = False
+                st.rerun()
+
+        _inner()
+        return
+
+    # Fallback: nếu Streamlit quá cũ không có dialog => hiển thị dạng "khung lớn"
+    st.warning("Streamlit phiên bản hiện tại chưa hỗ trợ dialog/modal. Đang dùng chế độ hiển thị thay thế.")
+    if live and st_autorefresh is not None:
+        st_autorefresh(interval=1500, key="wc_live_refresh_modal_fallback")
+
+    st.components.v1.html(wc_html_fs, height=760, scrolling=False)
+
+    if st.button("ĐÓNG FULLSCREEN", key="wc_close_full"):
+        st.session_state["wc_fullscreen"] = False
+        st.rerun()
 # ==========================================
 # 1. CẤU HÌNH & GIAO DIỆN (UI/UX)
 # ==========================================
@@ -852,28 +884,24 @@ def render_activity():
                 topk = pd.DataFrame(items[:20], columns=["Từ/cụm (chuẩn hoá)", "Số người nhập"])
                 st.dataframe(topk, use_container_width=True, hide_index=True)
 
-            # ✅ Fullscreen overlay (không dùng toolbar dataframe)
+            # ✅ Fullscreen overlay (phóng to ĐÚNG đám mây từ)
             if st.session_state.get("wc_fullscreen", False):
-                with st.modal("🖥 Fullscreen Wordcloud"):
-                    # Fullscreen cũng live update (nếu bật)
-                    if live and st_autorefresh is not None:
-                        st_autorefresh(interval=1500, key="wc_live_refresh_modal")
-
-                    if not freq:
-                        st.info("Chưa có dữ liệu. Mời lớp nhập từ khóa.")
-                    else:
-                        # lớn hơn để phóng to
-                        MAX_WORDS_SHOW = 120
-                        items_fs = sorted(freq.items(), key=lambda x: x[1], reverse=True)[:MAX_WORDS_SHOW]
-                        words_payload_fs = [{"text": k, "value": int(v)} for k, v in items_fs]
-                        words_json_fs = json.dumps(words_payload_fs, ensure_ascii=False)
-
-                        wc_html_fs = build_wordcloud_html(words_json_fs, height_px=720)
-                        st.components.v1.html(wc_html_fs, height=760, scrolling=False)
-
-                    if st.button("ĐÓNG FULLSCREEN", key="wc_close_full"):
+                if not freq:
+                    st.info("Chưa có dữ liệu. Mời lớp nhập từ khóa.")
+                    if st.button("ĐÓNG FULLSCREEN", key="wc_close_full_empty"):
                         st.session_state["wc_fullscreen"] = False
                         st.rerun()
+                else:
+                    MAX_WORDS_SHOW = 120
+                    items_fs = sorted(freq.items(), key=lambda x: x[1], reverse=True)[:MAX_WORDS_SHOW]
+                    words_payload_fs = [{"text": k, "value": int(v)} for k, v in items_fs]
+                    words_json_fs = json.dumps(words_payload_fs, ensure_ascii=False)
+            
+                    wc_html_fs = build_wordcloud_html(words_json_fs, height_px=720)
+            
+                    # ✅ mở fullscreen bằng dialog tương thích phiên bản streamlit
+                    open_wc_fullscreen_dialog(wc_html_fs, live)
+
 
     # ------------------------------------------
     # 2) POLL
