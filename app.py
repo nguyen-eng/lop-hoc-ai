@@ -926,9 +926,6 @@ if is_fs:
 
     # Khi fullscreen thì không cần render các phần phía dưới nữa
     return
-        # ✅ mở fullscreen bằng dialog tương thích phiên bản streamlit
-        open_wc_fullscreen_dialog(wc_html_fs, live)
-
     # ------------------------------------------
     # 2) POLL
     # ------------------------------------------
