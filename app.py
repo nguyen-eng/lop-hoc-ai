@@ -7,15 +7,12 @@ import plotly.graph_objects as go
 import time
 from datetime import datetime
 import threading
+import matplotlib.pyplot as plt
+from wordcloud import WordCloud
 import numpy as np
-import sqlite3
-import random
+from collections import Counter
 from io import BytesIO
-try:
-    from streamlit_autorefresh import st_autorefresh
-except ImportError:
-    st.error("Thiếu thư viện. Vui lòng chạy: pip install streamlit-autorefresh")
-    st_autorefresh = None
+import random  # Import random ở đầu file để tránh lỗi thiếu thư viện
 
 # ==========================================
 # 1. CẤU HÌNH & GIAO DIỆN (UI/UX)
@@ -196,8 +193,9 @@ except:
     model = None
 
 # ==========================================
-# 2. XỬ LÝ DỮ LIỆU (BACKEND - SQLITE)
+# 2. XỬ LÝ DỮ LIỆU (BACKEND)
 # ==========================================
+data_lock = threading.Lock()
 CLASSES = {f"Lớp học {i}": f"lop{i}" for i in range(1, 11)}
 
 PASSWORDS = {}
@@ -206,134 +204,156 @@ for i in range(1, 9):
 for i in range(9, 11):
     PASSWORDS[f"lop{i}"] = f"LH{i}"
 
-# ---- INIT DB ----
-def init_db():
-    conn = sqlite3.connect('class_data.db', check_same_thread=False)
-    c = conn.cursor()
-    # Tạo bảng nếu chưa có
-    c.execute('''CREATE TABLE IF NOT EXISTS responses 
-                 (class_id TEXT, activity TEXT, student TEXT, content TEXT, timestamp TEXT)''')
-    conn.commit()
-    return conn
-
-conn = init_db()
-db_lock = threading.Lock()
-
 # ---- SESSION STATE ----
 if "logged_in" not in st.session_state:
     st.session_state.update({"logged_in": False, "role": "", "class_id": ""})
 
+# page routing: login | class_home | activity | dashboard
 if "page" not in st.session_state:
     st.session_state["page"] = "login"
 
+# which activity: wordcloud/poll/openended/scales/ranking/pin
 if "current_act_key" not in st.session_state:
     st.session_state["current_act_key"] = "dashboard"
 
-# ---- DB FUNCTIONS ----
+def get_path(cls, act):
+    return f"data_{cls}_{act}.csv"
+
 def save_data(cls, act, name, content):
+    content = str(content).replace("|", "-").replace("\n", " ")
     timestamp = datetime.now().strftime("%H:%M:%S")
-    with db_lock:
-        c = conn.cursor()
-        c.execute("INSERT INTO responses VALUES (?, ?, ?, ?, ?)", (cls, act, name, str(content), timestamp))
-        conn.commit()
+    row = f"{name}|{content}|{timestamp}\n"
+    with data_lock:
+        with open(get_path(cls, act), "a", encoding="utf-8") as f:
+            f.write(row)
 
 def load_data(cls, act):
-    # Không dùng lock khi đọc để tăng tốc độ
-    c = conn.cursor()
-    c.execute("SELECT student, content, timestamp FROM responses WHERE class_id=? AND activity=?", (cls, act))
-    data = c.fetchall()
-    return pd.DataFrame(data, columns=["Học viên", "Nội dung", "Thời gian"])
+    path = get_path(cls, act)
+    if os.path.exists(path):
+        try:
+            return pd.read_csv(path, sep="|", names=["Học viên", "Nội dung", "Thời gian"])
+        except:
+            return pd.DataFrame(columns=["Học viên", "Nội dung", "Thời gian"])
+    return pd.DataFrame(columns=["Học viên", "Nội dung", "Thời gian"])
 
 def clear_activity(cls, act):
-    with db_lock:
-        c = conn.cursor()
-        c.execute("DELETE FROM responses WHERE class_id=? AND activity=?", (cls, act))
-        conn.commit()
+    with data_lock:
+        path = get_path(cls, act)
+        if os.path.exists(path):
+            os.remove(path)
 
 def reset_to_login():
     st.session_state.clear()
     st.rerun()
 
 # ==========================================
-# 3. CẤU HÌNH HOẠT ĐỘNG
+# 3. CẤU HÌNH HOẠT ĐỘNG THEO LỚP (Mentimeter-like)
 # ==========================================
 def class_topic(cid: str) -> str:
-    if cid in ["lop1", "lop2"]: return "Cặp phạm trù Nguyên nhân – Kết quả"
-    if cid in ["lop3", "lop4"]: return "Quy luật Phủ định của phủ định"
-    if cid in ["lop5", "lop6"]: return "Triết học về con người: tha hóa & giải phóng"
-    if cid in ["lop7", "lop8"]: return "Triết học về con người: cá nhân – xã hội"
-    return "Triết học Mác-xít (tổng quan)"
+    if cid in ["lop1", "lop2"]:
+        return "Cặp phạm trù Nguyên nhân – Kết quả (phân biệt nguyên cớ, điều kiện)"
+    if cid in ["lop3", "lop4"]:
+        return "Quy luật Phủ định của phủ định"
+    if cid in ["lop5", "lop6"]:
+        return "Triết học về con người: quan niệm – bản chất; tha hóa lao động; giải phóng con người"
+    if cid in ["lop7", "lop8"]:
+        return "Triết học về con người: cá nhân – xã hội; vấn đề con người trong Việt Nam"
+    return "Triết học Mác-xít (tổng quan các vấn đề cơ bản)"
 
 CLASS_ACT_CONFIG = {}
 for i in range(1, 11):
     cid = f"lop{i}"
     topic = class_topic(cid)
-    
-    # (Giữ nguyên cấu hình câu hỏi của Thầy)
+
     if cid in ["lop1", "lop2"]:
         wc_q = "Nêu 1 từ khóa để phân biệt *nguyên nhân* với *nguyên cớ*."
         poll_q = "Trong tình huống va quẹt xe rồi phát sinh đánh nhau, 'va quẹt xe' là gì?"
         poll_opts = ["Nguyên nhân trực tiếp", "Nguyên cớ", "Kết quả", "Điều kiện đủ"]
         poll_correct = "Nguyên cớ"
-        open_q = "Phân biệt *nguyên nhân – nguyên cớ – điều kiện* trong một vụ án giả định."
+        open_q = "Hãy viết 3–5 câu: phân biệt *nguyên nhân – nguyên cớ – điều kiện* trong một vụ án giả định (tự chọn)."
         criteria = ["Nhận diện nguyên nhân", "Nhận diện nguyên cớ", "Nhận diện điều kiện", "Lập luận logic"]
-        rank_items = ["Thu thập dấu vết", "Xác minh chuỗi nhân quả", "Loại bỏ 'nguyên cớ'", "Kiểm tra điều kiện"]
-        pin_q = "Ghim 'điểm nóng' nơi dễ phát sinh nguyên cớ (kích động, tin đồn...)."
+        rank_items = ["Thu thập dấu vết vật chất", "Xác minh chuỗi nguyên nhân", "Loại bỏ 'nguyên cớ' ngụy biện", "Kiểm tra điều kiện cần/đủ"]
+        pin_q = "Ghim 'điểm nóng' nơi dễ phát sinh nguyên cớ (kích động, tin đồn...) trong một sơ đồ lớp/bản đồ."
     elif cid in ["lop3", "lop4"]:
-        wc_q = "1 từ khóa mô tả 'tính kế thừa' trong phủ định biện chứng?"
-        poll_q = "Điểm phân biệt cốt lõi giữa 'phủ định biện chứng' và 'phủ định siêu hình'?"
-        poll_opts = ["Có tính kế thừa", "Phủ định sạch trơn", "Ngẫu nhiên", "Không dựa mâu thuẫn"]
+        wc_q = "1 từ khóa mô tả đúng nhất 'tính kế thừa' trong phủ định biện chứng?"
+        poll_q = "Điểm phân biệt cốt lõi giữa 'phủ định biện chứng' và 'phủ định siêu hình' là gì?"
+        poll_opts = ["Có tính kế thừa", "Phủ định sạch trơn", "Ngẫu nhiên thuần túy", "Không dựa mâu thuẫn nội tại"]
         poll_correct = "Có tính kế thừa"
-        open_q = "Ví dụ thực tiễn về phát triển theo 'đường xoáy ốc'."
-        criteria = ["Đúng 2 lần phủ định", "Yếu tố kế thừa", "Yếu tố vượt bỏ", "Liên hệ thực tiễn"]
-        rank_items = ["Xác định cái cũ", "Giữ lại cái hợp lý", "Tạo cơ chế tự phủ định", "Ổn định cái mới"]
-        pin_q = "Ghim vị trí 'điểm bẻ gãy' khi mâu thuẫn chín muồi."
-    # ... (Các lớp khác giữ mặc định logic như cũ để gọn code)
+        open_q = "Nêu 1 ví dụ trong công tác/đời sống thể hiện phát triển theo 'đường xoáy ốc' (tối thiểu 5 câu)."
+        criteria = ["Nêu đúng 2 lần phủ định", "Chỉ ra yếu tố kế thừa", "Chỉ ra yếu tố vượt bỏ", "Kết nối thực tiễn"]
+        rank_items = ["Xác định cái cũ cần vượt bỏ", "Giữ lại yếu tố hợp lý", "Tạo cơ chế tự phủ định", "Ổn định cái mới thành cái 'đang là'"]
+        pin_q = "Ghim vị trí trên sơ đồ để minh họa 'điểm bẻ gãy' khi mâu thuẫn chín muồi dẫn tới phủ định."
+    elif cid in ["lop5", "lop6"]:
+        wc_q = "1 từ khóa mô tả 'bản chất con người' trong quan điểm Mác?"
+        poll_q = "Theo Mác, bản chất con người trước hết là gì?"
+        poll_opts = ["Tổng hòa các quan hệ xã hội", "Bản năng sinh học cố định", "Tinh thần thuần túy", "Ý chí cá nhân đơn lẻ"]
+        poll_correct = "Tổng hòa các quan hệ xã hội"
+        open_q = "Mô tả một biểu hiện 'tha hóa' trong lao động (5–7 câu) và gợi ý 1 hướng 'giải phóng'."
+        criteria = ["Nêu đúng biểu hiện tha hóa", "Chỉ ra nguyên nhân xã hội", "Nêu hướng khắc phục", "Tính thực tiễn"]
+        rank_items = ["Cải thiện điều kiện lao động", "Dân chủ hóa tổ chức", "Phát triển năng lực người lao động", "Phân phối công bằng thành quả"]
+        pin_q = "Ghim nơi thể hiện mâu thuẫn giữa 'con người' và 'cơ chế' gây tha hóa (tượng trưng)."
+    elif cid in ["lop7", "lop8"]:
+        wc_q = "1 từ khóa mô tả quan hệ *cá nhân – xã hội* theo cách nhìn biện chứng?"
+        poll_q = "Khẳng định nào đúng nhất về quan hệ cá nhân – xã hội?"
+        poll_opts = ["Cá nhân và xã hội quy định lẫn nhau", "Xã hội chỉ là tổng số cá nhân", "Cá nhân quyết định tuyệt đối", "Xã hội quyết định tuyệt đối"]
+        poll_correct = "Cá nhân và xã hội quy định lẫn nhau"
+        open_q = "Nêu 1 vấn đề con người ở Việt Nam hiện nay (giá trị, lối sống, kỷ luật, trách nhiệm...) và phân tích theo 2 chiều: cá nhân – xã hội."
+        criteria = ["Nêu vấn đề đúng trọng tâm", "Phân tích chiều cá nhân", "Phân tích chiều xã hội", "Đề xuất giải pháp"]
+        rank_items = ["Giáo dục đạo đức – pháp luật", "Môi trường xã hội lành mạnh", "Cơ chế khuyến khích cái tốt", "Xử lý lệch chuẩn công bằng"]
+        pin_q = "Ghim vị trí 'điểm nghẽn' giữa cá nhân – tổ chức – xã hội (tượng trưng)."
     else:
-        wc_q = "1 từ khóa mô tả 'hạt nhân' của phép biện chứng?"
-        poll_q = "Vấn đề cơ bản của triết học là gì?"
-        poll_opts = ["Vật chất – ý thức", "Riêng – chung", "Lượng – chất", "Hình thức – nội dung"]
-        poll_correct = "Vật chất – ý thức"
-        open_q = "Vì sao cán bộ cần lập trường duy vật biện chứng khi xử lý chứng cứ?"
-        criteria = ["Tính khách quan", "Lập luận", "Liên hệ nghề nghiệp", "Diễn đạt"]
-        rank_items = ["Tôn trọng khách quan", "Chứng cứ vật chất", "Phân tích mâu thuẫn", "Kiểm chứng"]
-        pin_q = "Ghim nơi phát sinh sai lệch nhận thức trong quy trình."
+        wc_q = "1 từ khóa mô tả 'hạt nhân' của phép biện chứng duy vật?"
+        poll_q = "Trong triết học Mác – Lênin, vấn đề cơ bản của triết học là gì?"
+        poll_opts = ["Quan hệ vật chất – ý thức", "Quan hệ cái riêng – cái chung", "Quan hệ lượng – chất", "Quan hệ hình thức – nội dung"]
+        poll_correct = "Quan hệ vật chất – ý thức"
+        open_q = "Viết 5–7 câu: Vì sao người cán bộ (nhất là ĐTV) cần lập trường duy vật biện chứng khi xử lý chứng cứ?"
+        criteria = ["Nêu đúng nguyên tắc", "Lập luận chặt chẽ", "Liên hệ nghề nghiệp", "Diễn đạt rõ ràng"]
+        rank_items = ["Tôn trọng khách quan", "Chứng cứ vật chất", "Phân tích mâu thuẫn", "Kết luận có thể kiểm chứng"]
+        pin_q = "Ghim vị trí 'nơi phát sinh sai lệch nhận thức' trong quy trình xử lý thông tin (tượng trưng)."
 
     CLASS_ACT_CONFIG[cid] = {
         "topic": topic,
-        "wordcloud": {"name": "Word Cloud: Từ khóa", "type": "Word Cloud", "question": wc_q},
-        "poll": {"name": "Poll: Trắc nghiệm", "type": "Poll", "question": poll_q, "options": poll_opts, "correct": poll_correct},
-        "openended": {"name": "Open Ended: Trả lời mở", "type": "Open Ended", "question": open_q},
-        "scales": {"name": "Scales: Đánh giá", "type": "Scales", "question": "Tự đánh giá theo tiêu chí.", "criteria": criteria},
-        "ranking": {"name": "Ranking: Xếp hạng", "type": "Ranking", "question": "Sắp xếp thứ tự ưu tiên.", "items": rank_items},
-        "pin": {"name": "Pin: Ghim ảnh", "type": "Pin", "question": pin_q, "image": MAP_IMAGE},
+        "wordcloud": {"name": "Word Cloud: Từ khóa phân biệt", "type": "Từ khóa / Word Cloud", "question": wc_q},
+        "poll": {"name": "Poll: Chọn đúng bản chất", "type": "Bình chọn / Poll", "question": poll_q, "options": poll_opts, "correct": poll_correct},
+        "openended": {"name": "Open Ended: Tình huống – lập luận", "type": "Trả lời mở / Open Ended", "question": open_q},
+        "scales": {"name": "Scales: Tự đánh giá năng lực", "type": "Thang đo / Scales", "question": "Tự đánh giá theo các tiêu chí (1: thấp – 5: cao).", "criteria": criteria},
+        "ranking": {"name": "Ranking: Ưu tiên thao tác", "type": "Xếp hạng / Ranking", "question": "Sắp xếp thứ tự ưu tiên (quan trọng nhất lên đầu).", "items": rank_items},
+        "pin": {"name": "Pin: Điểm nóng tình huống", "type": "Ghim trên ảnh / Pin", "question": pin_q, "image": MAP_IMAGE},
     }
 
 # ==========================================
-# 4. LOGIN
+# 4. MÀN HÌNH ĐĂNG NHẬP (PRO)
 # ==========================================
 if (not st.session_state.get("logged_in", False)) or (st.session_state.get("page", "login") == "login"):
     st.session_state["page"] = "login"
+
     st.markdown("<div class='hero-wrap'>", unsafe_allow_html=True)
-    st.markdown(f"""
+    st.markdown("""
         <div class="hero-card">
             <div class="hero-top">
-                <div class="hero-badge"><img src="{LOGO_URL}" style="width:60px; height:60px; object-fit:contain;" /></div>
+                <div class="hero-badge">
+                    <img src="{logo}" style="width:60px; height:60px; object-fit:contain;" />
+                </div>
                 <div>
                     <p class="hero-title">TRƯỜNG ĐẠI HỌC CẢNH SÁT NHÂN DÂN</p>
-                    <p class="hero-sub">Hệ thống tương tác lớp học (v2.0)</p>
+                    <p class="hero-sub">Hệ thống tương tác lớp học </p>
                 </div>
             </div>
             <div class="hero-body">
-                <div class="hero-meta"><b>Khoa:</b> LLCT & KHXHNV<br><b>Giảng viên:</b> Trần Nguyễn Sĩ Nguyên</div>
+                <div class="hero-meta">
+                    <b>Khoa:</b> LLCT &amp; KHXHNV<br>
+                    <b>Giảng viên:</b> Trần Nguyễn Sĩ Nguyên
+                </div>
             </div>
         </div>
-    """, unsafe_allow_html=True)
+    """.format(logo=LOGO_URL), unsafe_allow_html=True)
 
+    st.write("")
     tab_sv, tab_gv = st.tabs(["CỔNG HỌC VIÊN", "CỔNG GIẢNG VIÊN"])
+
     with tab_sv:
         c_class = st.selectbox("Chọn lớp", list(CLASSES.keys()))
-        c_pass = st.text_input("Mã lớp", type="password")
+        c_pass = st.text_input("Mã lớp", type="password")  # ✅ bỏ placeholder để không lộ gợi ý
         if st.button("THAM GIA LỚP HỌC", key="btn_join"):
             cid = CLASSES[c_class]
             if c_pass.strip() == PASSWORDS[cid]:
@@ -350,16 +370,19 @@ if (not st.session_state.get("logged_in", False)) or (st.session_state.get("page
                 st.rerun()
             else:
                 st.error("Sai mật khẩu.")
+
     st.markdown("</div>", unsafe_allow_html=True)
     st.stop()
 
 # ==========================================
-# 5. SIDEBAR (CÓ CÔNG CỤ GV)
+# 5. SIDEBAR + NAV
 # ==========================================
 with st.sidebar:
     st.image(LOGO_URL, width=80)
     st.markdown("---")
-    
+    st.caption("🎵 NHẠC NỀN")
+    st.audio("https://www.soundhelix.com/examples/mp3/SoundHelix-Song-1.mp3")
+
     cls_txt = [k for k, v in CLASSES.items() if v == st.session_state["class_id"]][0]
     role = "HỌC VIÊN" if st.session_state["role"] == "student" else "GIẢNG VIÊN"
     st.info(f"👤 {role}\n\n🏫 {cls_txt}")
@@ -368,83 +391,77 @@ with st.sidebar:
         st.warning("CHUYỂN LỚP QUẢN LÝ")
         s_cls = st.selectbox("", list(CLASSES.keys()), label_visibility="collapsed")
         st.session_state["class_id"] = CLASSES[s_cls]
-        
-        # --- CÔNG CỤ GV (MỚI) ---
-        st.markdown("---")
-        st.header("⏱️ Công cụ lớp")
-        
-        # 1. Timer
-        with st.expander("Đồng hồ đếm ngược"):
-            t_min = st.number_input("Phút", 0, 60, 2)
-            if st.button("Bắt đầu đếm"):
-                t_ph = st.empty()
-                for i in range(t_min * 60, -1, -1):
-                    m, s = divmod(i, 60)
-                    t_ph.markdown(f"<h2 style='text-align:center; color:red'>{m:02d}:{s:02d}</h2>", unsafe_allow_html=True)
-                    time.sleep(1)
-                st.toast("HẾT GIỜ!", icon="🔔")
-
-        # 2. Random Picker
-        with st.expander("Gọi tên ngẫu nhiên"):
-            if st.button("🎲 Quay số"):
-                # Lấy tất cả học viên đã tương tác trong lớp này
-                c = conn.cursor()
-                c.execute("SELECT DISTINCT student FROM responses WHERE class_id=?", (st.session_state["class_id"],))
-                students = [row[0] for row in c.fetchall()]
-                
-                if students:
-                    lucky = random.choice(students)
-                    st.success(f"🎯 Mời đồng chí: **{lucky}**")
-                    st.balloons()
-                else:
-                    st.warning("Chưa có học viên nào nộp bài.")
 
     st.markdown("---")
-    if st.button("📚 Danh mục hoạt động"):
+    if st.button("📚 Danh mục hoạt động", key="nav_class_home"):
         st.session_state["page"] = "class_home"
         st.rerun()
-    if st.button("🏠 Dashboard"):
+
+    if st.button("🏠 Dashboard", key="nav_dashboard"):
         st.session_state["page"] = "dashboard"
         st.rerun()
+
     st.markdown("---")
-    if st.button("↩️ Đăng xuất"):
+    if st.button("↩️ Quay lại đăng nhập", key="nav_logout"):
         reset_to_login()
 
 # ==========================================
-# 6. TRANG DANH MỤC
+# 6. TRANG "DANH MỤC HOẠT ĐỘNG CỦA LỚP"
 # ==========================================
 def render_class_home():
     cid = st.session_state["class_id"]
     cfg = CLASS_ACT_CONFIG[cid]
-    
+    topic = cfg["topic"]
+    cls_txt = [k for k, v in CLASSES.items() if v == cid][0]
+
     st.markdown("<div class='list-wrap'>", unsafe_allow_html=True)
     st.markdown(f"""
         <div class="list-header">
             <div>
-                <p class="list-title">📚 Danh mục hoạt động</p>
-                <p class="list-sub">{cfg['topic']}</p>
+                <p class="list-title">📚 Danh mục hoạt động của lớp</p>
+                <p class="list-sub"><b>{cls_txt}</b> • Chủ đề: {topic}</p>
             </div>
         </div>
     """, unsafe_allow_html=True)
 
-    act_order = ["wordcloud", "poll", "openended", "scales", "ranking", "pin"]
-    
-    for key in act_order:
-        a = cfg[key]
-        df = load_data(cid, key)
+    c_back, c_space = st.columns([1, 5])
+    with c_back:
+        if st.button("↩️ Đăng xuất", key="btn_logout_top"):
+            reset_to_login()
+    with c_space:
+        st.caption("Chọn một hoạt động để vào làm bài / xem kết quả (GV có thêm phân tích AI & reset).")
+
+    def open_activity(act_key: str):
+        st.session_state["current_act_key"] = act_key
+        st.session_state["page"] = "activity"
+        st.rerun()
+
+    act_order = [
+        ("wordcloud", "wordcloud_row"),
+        ("poll", "poll_row"),
+        ("openended", "openended_row"),
+        ("scales", "scales_row"),
+        ("ranking", "ranking_row"),
+        ("pin", "pin_row"),
+    ]
+
+    for act_key, ksuffix in act_order:
+        a = cfg[act_key]
+        df = load_data(cid, act_key)
+        count = len(df)
+
         colL, colR = st.columns([6, 1])
         with colL:
             st.markdown(f"""
                 <div class="act-row">
                     <p class="act-name">{a["name"]}</p>
-                    <p class="act-meta">{a["type"]} • {len(df)} lượt trả lời</p>
+                    <p class="act-meta">Loại hoạt động: {a["type"]} • Số lượt trả lời: <b>{count}</b></p>
                 </div>
             """, unsafe_allow_html=True)
         with colR:
-            if st.button("MỞ", key=f"open_{key}"):
-                st.session_state["current_act_key"] = key
-                st.session_state["page"] = "activity"
-                st.rerun()
+            if st.button("MỞ", key=f"open_{ksuffix}"):
+                open_activity(act_key)
+
     st.markdown("</div>", unsafe_allow_html=True)
 
 # ==========================================
@@ -452,203 +469,624 @@ def render_class_home():
 # ==========================================
 def render_dashboard():
     cid = st.session_state["class_id"]
-    st.header("🏠 Dashboard Tổng quan")
+    topic = CLASS_ACT_CONFIG[cid]["topic"]
+    st.markdown(
+        f"<h2 style='color:{PRIMARY_COLOR}; border-bottom:2px solid #e2e8f0; padding-bottom:10px;'>🏠 Dashboard</h2>",
+        unsafe_allow_html=True
+    )
+    st.caption(f"Chủ đề lớp: {topic}")
+
     cols = st.columns(3)
-    acts = ["wordcloud", "poll", "openended", "scales", "ranking", "pin"]
-    
-    for i, act in enumerate(acts):
+    activities = ["wordcloud", "poll", "openended", "scales", "ranking", "pin"]
+    names = ["WORD CLOUD", "POLL", "OPEN ENDED", "SCALES", "RANKING", "PIN IMAGE"]
+
+    for i, act in enumerate(activities):
         df = load_data(cid, act)
-        with cols[i%3]:
+        with cols[i % 3]:
             st.markdown(f"""
             <div class="viz-card" style="text-align:center;">
                 <h1 style="color:{PRIMARY_COLOR}; margin:0; font-size:40px;">{len(df)}</h1>
-                <p style="color:{MUTED}; font-weight:800; text-transform:uppercase;">{act}</p>
+                <p style="color:{MUTED}; font-weight:800; text-transform:uppercase;">{names[i]}</p>
             </div>
             """, unsafe_allow_html=True)
 
+    st.caption("Gợi ý: dùng sidebar → “Danh mục hoạt động” để mở hoạt động như Mentimeter.")
+
 # ==========================================
-# 8. TRANG HOẠT ĐỘNG CHI TIẾT
+# 8. TRANG HOẠT ĐỘNG
 # ==========================================
 def render_activity():
     cid = st.session_state["class_id"]
     act = st.session_state.get("current_act_key", "wordcloud")
     cfg = CLASS_ACT_CONFIG[cid][act]
 
-    # --- AUTO REFRESH CHO GV ---
-    if st.session_state["role"] == "teacher" and st_autorefresh:
-        st_autorefresh(interval=2000, key="data_refresh")
-
-    # Header
     topL, topR = st.columns([1, 5])
     with topL:
-        if st.button("↩️ Quay lại"):
+        if st.button("↩️ Về danh mục lớp", key="btn_back_class_home"):
             st.session_state["page"] = "class_home"
             st.rerun()
     with topR:
-        st.markdown(f"<h2 style='color:{PRIMARY_COLOR}'>{cfg['name']}</h2>", unsafe_allow_html=True)
+        st.markdown(
+            f"<h2 style='color:{PRIMARY_COLOR}; border-bottom:2px solid #e2e8f0; padding-bottom:10px;'>{cfg['name']}</h2>",
+            unsafe_allow_html=True
+        )
 
-    # --- NỘI DUNG CHÍNH ---
-    c1, c2 = st.columns([1, 2])
-    
-    # CỘT TRÁI: INPUT / INFO
-    with c1:
-        st.info(f"**{cfg['question']}**")
-        
-        if st.session_state["role"] == "student":
-            # Form WordCloud
-            if act == "wordcloud":
+    current_act_key = act
+
+    # ------------------------------------------
+    # 1) WORD CLOUD (Mentimeter-like, stable layout + center by bounding box + live update)
+    # ------------------------------------------
+    if act == "wordcloud":
+        c1, c2 = st.columns([1, 2])
+
+        # --- CỘT TRÁI: NHẬP LIỆU ---
+        with c1:
+            st.info(f"Câu hỏi: **{cfg['question']}**")
+            if st.session_state["role"] == "student":
                 with st.form("f_wc"):
                     n = st.text_input("Tên")
-                    txt = st.text_input("Từ khóa (1 từ/cụm)")
+                    txt = st.text_input("Nhập 1 từ khóa / cụm từ (giữ nguyên cụm)")
                     if st.form_submit_button("GỬI"):
-                        if n and txt: 
-                            save_data(cid, act, n, txt)
-                            st.success("Đã gửi!"); st.rerun()
-            
-            # Form Poll
-            elif act == "poll":
+                        if n.strip() and txt.strip():
+                            save_data(cid, current_act_key, n, txt)
+                            st.success("Đã gửi!")
+                            time.sleep(0.2)
+                            st.rerun()
+                        else:
+                            st.warning("Vui lòng nhập đủ Tên và Từ khóa.")
+            else:
+                st.warning("Giảng viên xem kết quả bên phải.")
+
+        # --- CỘT PHẢI: HIỂN THỊ KẾT QUẢ ---
+        with c2:
+            st.markdown("##### ☁️ KẾT QUẢ (tự cập nhật)")
+
+            # ✅ LIVE UPDATE: tự rerun để lấy dữ liệu mới (không cần bạn reload thủ công)
+            # interval (ms) có thể giảm xuống 800-1200 nếu muốn "real-time" hơn
+            st.autorefresh(interval=1500, key="wc_live_refresh")
+
+            df = load_data(cid, current_act_key)
+
+            with st.container(border=True):
+                if df.empty:
+                    st.info("Chưa có dữ liệu. Mời lớp nhập từ khóa.")
+                else:
+                    import re, json
+
+                    def normalize_phrase(s: str) -> str:
+                        s = str(s or "").strip().lower()
+                        s = re.sub(r"\s+", " ", s)
+                        s = s.strip(" .,:;!?\"'`()[]{}<>|\\/+-=*#@~^_")
+                        return s
+
+                    # 1) Đếm theo SỐ NGƯỜI (unique học viên) cho mỗi phrase
+                    tmp = df[["Học viên", "Nội dung"]].dropna().copy()
+                    tmp["Học viên"] = tmp["Học viên"].astype(str).str.strip()
+                    tmp["phrase"] = tmp["Nội dung"].astype(str).apply(normalize_phrase)
+                    tmp = tmp[(tmp["Học viên"] != "") & (tmp["phrase"] != "")]
+                    tmp = tmp.drop_duplicates(subset=["Học viên", "phrase"])
+
+                    freq = tmp["phrase"].value_counts().to_dict()
+
+                    if not freq:
+                        st.info("Chưa có từ/cụm hợp lệ sau khi chuẩn hoá.")
+                    else:
+                        MAX_WORDS_SHOW = 80
+                        items = sorted(freq.items(), key=lambda x: x[1], reverse=True)[:MAX_WORDS_SHOW]
+                        words_payload = [{"text": k, "value": int(v)} for k, v in items]
+                        words_json = json.dumps(words_payload, ensure_ascii=False)
+
+                        total_answers = int(df["Nội dung"].dropna().shape[0])
+                        total_people = int(tmp["Học viên"].nunique())
+                        total_unique_phrases = int(len(freq))
+
+                        # ✅ HTML Word Cloud: center by bounding box, stable random, no quadrant drift
+                        comp_html = """
+<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8"/>
+  <style>
+    body { margin:0; background:white; }
+    #wc-wrap {
+      width: 100%;
+      height: 520px;
+      border-radius: 12px;
+      background: #ffffff;
+      overflow: hidden;
+    }
+    svg { width:100%; height:100%; display:block; }
+    .word {
+      font-family: 'Montserrat', system-ui, -apple-system, Segoe UI, Roboto, Arial, sans-serif;
+      font-weight: 800;
+      cursor: default;
+      user-select: none;
+    }
+  </style>
+</head>
+<body>
+  <div id="wc-wrap"></div>
+
+  <script src="https://cdn.jsdelivr.net/npm/d3@7/dist/d3.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/d3-cloud@1/build/d3.layout.cloud.js"></script>
+  <script>
+    const data = __WORDS_JSON__;
+
+    const wrap = document.getElementById("wc-wrap");
+    const W = wrap.clientWidth || 900;
+    const H = wrap.clientHeight || 520;
+
+    // Stable RNG for layout stability (less jumping)
+    function mulberry32(a) {
+      return function() {
+        var t = a += 0x6D2B79F5;
+        t = Math.imul(t ^ t >>> 15, t | 1);
+        t ^= t + Math.imul(t ^ t >>> 7, t | 61);
+        return ((t ^ t >>> 14) >>> 0) / 4294967296;
+      }
+    }
+    const rng = mulberry32(42);
+
+    // Log scale for font sizes. vmax==vmin => all same size.
+    const vals = data.map(d => d.value);
+    const vmin = Math.max(1, d3.min(vals));
+    const vmax = Math.max(1, d3.max(vals));
+
+    let fontScale;
+    if (vmax === vmin) {
+      fontScale = () => 64; // tất cả cùng 1 vote => cùng size
+    } else {
+      fontScale = d3.scaleLog()
+        .domain([vmin, vmax])
+        .range([28, 110])
+        .clamp(true);
+    }
+
+    // Orientation: 70% horizontal, 30% vertical (-90)
+    function rotateFn() {
+      return (rng() < 0.70) ? 0 : -90;
+    }
+
+    // Vibrant color using golden ratio hue
+    const GOLDEN_RATIO = 0.61803398875;
+    let hue = 0.12;
+
+    function nextColor(prevHue) {
+      hue = (hue + GOLDEN_RATIO) % 1.0;
+      let h = hue * 360;
+
+      if (prevHue !== null) {
+        const diff = Math.abs(h - prevHue);
+        if (diff < 22) h = (h + 35) % 360;
+      }
+      return { color: `hsl(${h}, 85%, 52%)`, hue: h };
+    }
+
+    const words = data
+      .slice()
+      .sort((a,b) => d3.descending(a.value, b.value))
+      .map(d => ({
+        text: d.text,
+        value: d.value,
+        size: Math.round(fontScale(d.value)),
+        rotate: rotateFn(),
+        __key: d.text
+      }));
+
+    const svg = d3.select("#wc-wrap").append("svg")
+      .attr("viewBox", `0 0 ${W} ${H}`);
+
+    const g = svg.append("g")
+      .attr("transform", `translate(${W/2},${H/2})`);
+
+    // Keep previous positions for smooth transitions
+    const prev = new Map();
+    try {
+      const saved = sessionStorage.getItem("wc_prev");
+      if (saved) {
+        const obj = JSON.parse(saved);
+        Object.keys(obj).forEach(k => prev.set(k, obj[k]));
+      }
+    } catch(e) {}
+
+    function savePrev(map) {
+      try {
+        const obj = {};
+        map.forEach((v,k)=> obj[k]=v);
+        sessionStorage.setItem("wc_prev", JSON.stringify(obj));
+      } catch(e) {}
+    }
+
+    const layout = d3.layout.cloud()
+      .size([W, H])
+      .words(words)
+      .padding(7)
+      .spiral("archimedean")
+      .rotate(d => d.rotate)
+      .font("Montserrat")
+      .fontSize(d => d.size)
+      .random(() => rng());
+
+    layout.on("end", draw);
+    layout.start();
+
+    function draw(placed) {
+      // ✅ CENTER BY BOUNDING BOX (không bị dạt 1 góc)
+      // d3-cloud provides width/height; use them to compute bounds
+      let minX = Infinity, maxX = -Infinity, minY = Infinity, maxY = -Infinity;
+
+      placed.forEach(w => {
+        const ww = (w.width || 0);
+        const hh = (w.height || 0);
+        const x0 = w.x - ww/2;
+        const x1 = w.x + ww/2;
+        const y0 = w.y - hh/2;
+        const y1 = w.y + hh/2;
+        if (x0 < minX) minX = x0;
+        if (x1 > maxX) maxX = x1;
+        if (y0 < minY) minY = y0;
+        if (y1 > maxY) maxY = y1;
+      });
+
+      const cx = (minX + maxX) / 2;
+      const cy = (minY + maxY) / 2;
+
+      placed.forEach(w => {
+        w.x = w.x - cx;
+        w.y = w.y - cy;
+      });
+
+      // Colors with stability
+      let prevHue = null;
+      const colorMap = new Map();
+      placed.forEach(w => {
+        const p = prev.get(w.__key);
+        if (p && p.color) {
+          colorMap.set(w.__key, p.color);
+          prevHue = (p.hue !== undefined && p.hue !== null) ? p.hue : prevHue;
+        } else {
+          const c = nextColor(prevHue);
+          colorMap.set(w.__key, c);
+          prevHue = c.hue;
+        }
+      });
+
+      const sel = g.selectAll("text.word")
+        .data(placed, d => d.__key);
+
+      sel.exit()
+        .transition().duration(350)
+        .style("opacity", 0)
+        .remove();
+
+      const enter = sel.enter().append("text")
+        .attr("class", "word")
+        .attr("text-anchor", "middle")
+        .style("opacity", 0)
+        .text(d => d.text);
+
+      const merged = enter.merge(sel);
+
+      merged.each(function(d) {
+        const node = d3.select(this);
+        const p = prev.get(d.__key);
+
+        const x0 = p ? p.x : d.x;
+        const y0 = p ? p.y : d.y;
+        const r0 = p ? p.rotate : d.rotate;
+        const s0 = p ? p.size : 0;
+
+        const c = colorMap.get(d.__key);
+        const col = (c && c.color) ? c.color : c;
+
+        node
+          .attr("transform", `translate(${x0},${y0}) rotate(${r0})`)
+          .style("fill", col)
+          .style("font-size", `${s0}px`);
+      });
+
+      merged.transition()
+        .duration(800)
+        .ease(d3.easeCubicOut)
+        .style("opacity", 1)
+        .attr("transform", d => `translate(${d.x},${d.y}) rotate(${d.rotate})`)
+        .style("font-size", d => `${d.size}px`);
+
+      const nextPrev = new Map();
+      placed.forEach(d => {
+        const c = colorMap.get(d.__key);
+        if (c && c.color) {
+          nextPrev.set(d.__key, {x:d.x, y:d.y, rotate:d.rotate, size:d.size, color:c, hue:c.hue});
+        } else {
+          nextPrev.set(d.__key, {x:d.x, y:d.y, rotate:d.rotate, size:d.size, color:c});
+        }
+      });
+      savePrev(nextPrev);
+    }
+  </script>
+</body>
+</html>
+"""
+                        comp_html = comp_html.replace("__WORDS_JSON__", words_json)
+
+                        # ✅ Đây là element chính: bấm FULLSCREEN sẽ phóng to WORDCLOUD
+                        st.components.v1.html(comp_html, height=540, scrolling=False)
+
+                        # ✅ FIX INDENT: caption và bảng phải nằm đúng cấp, không thụt bừa
+                        st.caption(
+                            f"👥 Lượt gửi: **{total_answers}** • 👤 Người tham gia (unique): **{total_people}** • 🧩 Cụm duy nhất: **{total_unique_phrases}**"
+                        )
+
+                        # ✅ Đưa bảng vào expander để nút fullscreen không còn “ưu tiên” bảng dữ liệu
+                        with st.expander("📋 Xem danh sách chuẩn hoá (Top 20)", expanded=False):
+                            topk = pd.DataFrame(items[:20], columns=["Từ/cụm (chuẩn hoá)", "Số người nhập"])
+                            st.dataframe(topk, use_container_width=True, hide_index=True)
+
+    # ------------------------------------------
+    # 2) POLL
+    # ------------------------------------------
+    elif act == "poll":
+        c1, c2 = st.columns([1, 2])
+        options = cfg["options"]
+        with c1:
+            st.info(f"Câu hỏi: **{cfg['question']}**")
+            if st.session_state["role"] == "student":
                 with st.form("f_poll"):
                     n = st.text_input("Tên")
-                    v = st.radio("Chọn", cfg["options"])
-                    if st.form_submit_button("CHỌN"):
-                        if n: save_data(cid, act, n, v); st.success("Đã chọn!"); st.rerun()
+                    vote = st.radio("Lựa chọn", options)
+                    if st.form_submit_button("BÌNH CHỌN"):
+                        if n.strip():
+                            save_data(cid, current_act_key, n, vote)
+                            st.success("Đã chọn!")
+                            time.sleep(0.2)
+                            st.rerun()
+                        else:
+                            st.warning("Vui lòng nhập Tên.")
+            else:
+                st.caption(f"Đáp án gợi ý (chỉ GV): **{cfg.get('correct','')}**")
+        with c2:
+            st.markdown("##### 📊 THỐNG KÊ")
+            df = load_data(cid, current_act_key)
+            with st.container(border=True):
+                if not df.empty:
+                    cnt = df["Nội dung"].value_counts().reset_index()
+                    cnt.columns = ["Lựa chọn", "Số lượng"]
+                    fig = px.bar(cnt, x="Lựa chọn", y="Số lượng", text_auto=True)
+                    st.plotly_chart(fig, use_container_width=True)
+                else:
+                    st.info("Chưa có bình chọn nào.")
 
-            # Form OpenEnded
-            elif act == "openended":
+    # ------------------------------------------
+    # 3) OPEN ENDED
+    # ------------------------------------------
+    elif act == "openended":
+        c1, c2 = st.columns([1, 2])
+        with c1:
+            st.info(f"**{cfg['question']}**")
+            if st.session_state["role"] == "student":
                 with st.form("f_open"):
                     n = st.text_input("Tên")
                     c = st.text_area("Câu trả lời")
                     if st.form_submit_button("GỬI"):
-                        if n and c: save_data(cid, act, n, c); st.success("Đã gửi!"); st.rerun()
+                        if n.strip() and c.strip():
+                            save_data(cid, current_act_key, n, c)
+                            st.success("Đã gửi!")
+                            time.sleep(0.2)
+                            st.rerun()
+                        else:
+                            st.warning("Vui lòng nhập đủ Tên và nội dung.")
+        with c2:
+            st.markdown("##### 💬 BỨC TƯỜNG Ý KIẾN")
+            df = load_data(cid, current_act_key)
+            with st.container(border=True, height=520):
+                if not df.empty:
+                    for _, r in df.iterrows():
+                        st.markdown(
+                            f'<div class="note-card"><b>{r["Học viên"]}</b>: {r["Nội dung"]}</div>',
+                            unsafe_allow_html=True
+                        )
+                else:
+                    st.info("Chưa có câu trả lời.")
 
-            # Form Scales
-            elif act == "scales":
+    # ------------------------------------------
+    # 4) SCALES
+    # ------------------------------------------
+    elif act == "scales":
+        c1, c2 = st.columns([1, 2])
+        criteria = cfg["criteria"]
+        with c1:
+            st.info(f"**{cfg['question']}**")
+            if st.session_state["role"] == "student":
                 with st.form("f_scale"):
                     n = st.text_input("Tên")
-                    scores = [st.slider(c,1,5,3) for c in cfg["criteria"]]
-                    if st.form_submit_button("GỬI"):
-                        if n: save_data(cid, act, n, ",".join(map(str,scores))); st.success("Đã gửi!"); st.rerun()
+                    scores = []
+                    for cri in criteria:
+                        scores.append(st.slider(cri, 1, 5, 3))
+                    if st.form_submit_button("GỬI ĐÁNH GIÁ"):
+                        if n.strip():
+                            val = ",".join(map(str, scores))
+                            save_data(cid, current_act_key, n, val)
+                            st.success("Đã lưu!")
+                            time.sleep(0.2)
+                            st.rerun()
+                        else:
+                            st.warning("Vui lòng nhập Tên.")
+        with c2:
+            st.markdown("##### 🕸️ TỔNG HỢP")
+            df = load_data(cid, current_act_key)
+            with st.container(border=True):
+                if not df.empty:
+                    try:
+                        data_matrix = []
+                        for item in df["Nội dung"]:
+                            data_matrix.append([int(x) for x in str(item).split(",")])
+                        avg_scores = np.mean(data_matrix, axis=0)
 
-            # Form Ranking
-            elif act == "ranking":
+                        fig = go.Figure(data=go.Scatterpolar(
+                            r=avg_scores, theta=criteria, fill='toself', name='Lớp'
+                        ))
+                        fig.update_layout(polar=dict(radialaxis=dict(visible=True, range=[0, 5])), showlegend=False)
+                        st.plotly_chart(fig, use_container_width=True)
+                    except:
+                        st.error("Dữ liệu lỗi định dạng.")
+                else:
+                    st.info("Chưa có dữ liệu thang đo.")
+
+    # ------------------------------------------
+    # 5) RANKING
+    # ------------------------------------------
+    elif act == "ranking":
+        c1, c2 = st.columns([1, 2])
+        items = cfg["items"]
+        with c1:
+            st.info(f"**{cfg['question']}**")
+            if st.session_state["role"] == "student":
                 with st.form("f_rank"):
                     n = st.text_input("Tên")
-                    r = st.multiselect("Thứ tự ưu tiên", cfg["items"])
+                    rank = st.multiselect("Chọn theo thứ tự (đủ tất cả mục)", items)
                     if st.form_submit_button("NỘP"):
-                        if n and len(r)==len(cfg["items"]): 
-                            save_data(cid, act, n, "->".join(r)); st.success("Đã nộp!"); st.rerun()
-                        else: st.warning("Chọn đủ các mục.")
+                        if not n.strip():
+                            st.warning("Vui lòng nhập Tên.")
+                        elif len(rank) != len(items):
+                            st.warning(f"Vui lòng chọn đủ {len(items)} mục.")
+                        else:
+                            save_data(cid, current_act_key, n, "->".join(rank))
+                            st.success("Đã nộp!")
+                            time.sleep(0.2)
+                            st.rerun()
+        with c2:
+            st.markdown("##### 🏆 KẾT QUẢ")
+            df = load_data(cid, current_act_key)
+            with st.container(border=True):
+                if not df.empty:
+                    scores = {k: 0 for k in items}
+                    for r in df["Nội dung"]:
+                        parts = str(r).split("->")
+                        for idx, item in enumerate(parts):
+                            scores[item] += (len(items) - idx)
 
-            # Form Pin
-            elif act == "pin":
+                    sorted_items = sorted(scores.items(), key=lambda x: x[1], reverse=True)
+                    labels = [x[0] for x in sorted_items]
+                    vals = [x[1] for x in sorted_items]
+
+                    fig = px.bar(x=vals, y=labels, orientation='h', labels={'x': 'Tổng điểm', 'y': 'Mục'}, text=vals)
+                    fig.update_layout(yaxis={'categoryorder': 'total ascending'})
+                    st.plotly_chart(fig, use_container_width=True)
+                else:
+                    st.info("Chưa có xếp hạng.")
+
+    # ------------------------------------------
+    # 6) PIN ON IMAGE
+    # ------------------------------------------
+    elif act == "pin":
+        c1, c2 = st.columns([1, 2])
+        with c1:
+            st.info(f"**{cfg['question']}**")
+            if st.session_state["role"] == "student":
                 with st.form("f_pin"):
                     n = st.text_input("Tên")
-                    x = st.slider("Ngang",0,100,50); y = st.slider("Dọc",0,100,50)
+                    x_val = st.slider("Vị trí ngang (Trái → Phải)", 0, 100, 50)
+                    y_val = st.slider("Vị trí dọc (Dưới → Trên)", 0, 100, 50)
                     if st.form_submit_button("GHIM"):
-                        if n: save_data(cid, act, n, f"{x},{y}"); st.success("Đã ghim!"); st.rerun()
-        else:
-            st.caption("Giảng viên theo dõi kết quả bên phải.")
-            if act == "poll": st.caption(f"Đáp án đúng: {cfg['correct']}")
-
-    # CỘT PHẢI: VISUALIZATION
-    with c2:
-        df = load_data(cid, act)
-        st.markdown("##### 📡 KẾT QUẢ TRỰC TUYẾN")
-        
-        with st.container(border=True):
-            if df.empty:
-                st.info("Đang chờ dữ liệu từ lớp...")
-            else:
-                # VIZ: Word Cloud
-                if act == "wordcloud":
-                    text = " ".join(df["Nội dung"].tolist())
-                    if text:
-                        wc = WordCloud(width=800, height=400, background_color='white', colormap='ocean').generate(text)
-                        plt.figure(figsize=(10,5))
-                        plt.imshow(wc, interpolation='bilinear'); plt.axis("off")
-                        st.pyplot(plt)
-                        st.dataframe(df["Nội dung"].value_counts().head(10), use_container_width=True)
-
-                # VIZ: Poll
-                elif act == "poll":
-                    cnt = df["Nội dung"].value_counts().reset_index()
-                    cnt.columns = ["Lựa chọn", "Số lượng"]
-                    fig = px.bar(cnt, x="Lựa chọn", y="Số lượng", text_auto=True, color="Lựa chọn")
-                    st.plotly_chart(fig, use_container_width=True)
-
-                # VIZ: Open Ended
-                elif act == "openended":
-                    for _, r in df.iterrows():
-                        st.markdown(f"<div class='note-card'><b>{r['Học viên']}</b>: {r['Nội dung']}</div>", unsafe_allow_html=True)
-
-                # VIZ: Scales
-                elif act == "scales":
+                        if n.strip():
+                            save_data(cid, current_act_key, n, f"{x_val},{y_val}")
+                            st.success("Đã ghim!")
+                            time.sleep(0.2)
+                            st.rerun()
+                        else:
+                            st.warning("Vui lòng nhập Tên.")
+        with c2:
+            st.markdown("##### 📍 BẢN ĐỒ NHIỆT / ĐIỂM GHIM")
+            df = load_data(cid, current_act_key)
+            with st.container(border=True):
+                if not df.empty:
                     try:
-                        mtx = [[int(x) for x in str(i).split(",")] for i in df["Nội dung"]]
-                        avg = np.mean(mtx, axis=0)
-                        fig = go.Figure(data=go.Scatterpolar(r=avg, theta=cfg["criteria"], fill='toself'))
-                        fig.update_layout(polar=dict(radialaxis=dict(visible=True, range=[0, 5])))
+                        xs, ys = [], []
+                        for item in df["Nội dung"]:
+                            coords = str(item).split(",")
+                            xs.append(int(coords[0]))
+                            ys.append(int(coords[1]))
+
+                        fig = go.Figure()
+                        fig.add_trace(go.Scatter(
+                            x=xs, y=ys, mode='markers',
+                            marker=dict(size=12, color='red', opacity=0.7, line=dict(width=1, color='white')),
+                            name='Vị trí'
+                        ))
+
+                        fig.update_layout(
+                            xaxis=dict(range=[0, 100], showgrid=False, zeroline=False, visible=False),
+                            yaxis=dict(range=[0, 100], showgrid=False, zeroline=False, visible=False),
+                            images=[dict(
+                                source=cfg.get("image", MAP_IMAGE),
+                                xref="x", yref="y",
+                                x=0, y=100, sizex=100, sizey=100,
+                                sizing="stretch", layer="below"
+                            )],
+                            width=700, height=420, margin=dict(l=0, r=0, t=0, b=0)
+                        )
                         st.plotly_chart(fig, use_container_width=True)
-                    except: st.error("Lỗi dữ liệu")
+                    except:
+                        st.error("Lỗi dữ liệu ghim.")
+                else:
+                    st.info("Chưa có ghim nào.")
 
-                # VIZ: Ranking
-                elif act == "ranking":
-                    sc = {k:0 for k in cfg["items"]}
-                    for r in df["Nội dung"]:
-                        for i, item in enumerate(str(r).split("->")):
-                            sc[item] += (len(cfg["items"]) - i)
-                    s_items = sorted(sc.items(), key=lambda x:x[1], reverse=True)
-                    fig = px.bar(x=[x[1] for x in s_items], y=[x[0] for x in s_items], orientation='h')
-                    st.plotly_chart(fig, use_container_width=True)
-
-                # VIZ: Pin
-                elif act == "pin":
-                    xs = [int(i.split(",")[0]) for i in df["Nội dung"]]
-                    ys = [int(i.split(",")[1]) for i in df["Nội dung"]]
-                    fig = go.Figure()
-                    fig.add_trace(go.Scatter(x=xs, y=ys, mode='markers', marker=dict(size=12, color='red')))
-                    fig.update_layout(
-                        xaxis=dict(range=[0,100], visible=False), yaxis=dict(range=[0,100], visible=False),
-                        images=[dict(source=cfg["image"], xref="x", yref="y", x=0, y=100, sizex=100, sizey=100, layer="below")],
-                        width=700, height=420, margin=dict(l=0, r=0, t=0, b=0)
-                    )
-                    st.plotly_chart(fig, use_container_width=True)
-
-    # --- CONTROL PANEL GV ---
+    # ==========================================
+    # CONTROL PANEL CHO GIẢNG VIÊN (CHUNG)
+    # ==========================================
     if st.session_state["role"] == "teacher":
         st.markdown("---")
-        with st.expander("👮‍♂️ BẢNG ĐIỀU KHIỂN & BÁO CÁO", expanded=True):
-            c_ai, c_tool = st.columns([3, 1])
-            
-            with c_ai:
-                st.markdown("###### 🤖 AI Phân tích")
-                prompt = st.text_input("Yêu cầu AI", placeholder="Ví dụ: Xu hướng trả lời của lớp là gì?")
-                if st.button("PHÂN TÍCH"):
-                    if model:
-                        with st.spinner("Đang xử lý..."):
-                            res = model.generate_content(f"Dữ liệu lớp {cid}, bài {act}: {df.to_string()}\n\nYêu cầu: {prompt}")
-                            st.info(res.text)
-                    else: st.warning("Chưa có API Key")
+        with st.expander("👮‍♂️ BẢNG ĐIỀU KHIỂN GIẢNG VIÊN (Hoạt động hiện tại)", expanded=True):
+            col_ai, col_reset = st.columns([3, 1])
 
-            with c_tool:
-                st.markdown("###### 🛠️ Công cụ")
-                # XUẤT EXCEL
-                def to_excel(df):
-                    output = BytesIO()
-                    with pd.ExcelWriter(output, engine='xlsxwriter') as writer:
-                        df.to_excel(writer, index=False, sheet_name='Sheet1')
-                    return output.getvalue()
-                
-                if not df.empty:
-                    st.download_button("📥 Xuất Excel", data=to_excel(df), file_name=f"{cid}_{act}.xlsx", mime="application/vnd.ms-excel")
-                
-                if st.button("🗑 RESET DATA", type="primary"):
-                    clear_activity(cid, act)
+            with col_ai:
+                st.markdown("###### 🤖 AI Trợ giảng")
+                prompt = st.text_input("Nhập lệnh cho AI", placeholder="Ví dụ: Hãy rút ra 3 xu hướng chính và 2 gợi ý giảng dạy.")
+                if st.button("PHÂN TÍCH NGAY", key="btn_ai"):
+                    curr_df = load_data(cid, current_act_key)
+                    if curr_df.empty:
+                        st.warning("Chưa có dữ liệu để phân tích.")
+                    elif model is None:
+                        st.warning("Chưa cấu hình GEMINI_API_KEY trong st.secrets.")
+                    elif not prompt.strip():
+                        st.warning("Vui lòng nhập yêu cầu phân tích.")
+                    else:
+                        with st.spinner("AI đang phân tích..."):
+                            payload = f"""
+Bạn là trợ giảng cho giảng viên. Đây là dữ liệu hoạt động ({cfg['name']}) của {cid}.
+Chủ đề lớp: {CLASS_ACT_CONFIG[cid]['topic']}
+
+DỮ LIỆU (dạng bảng):
+{curr_df.to_string(index=False)}
+
+YÊU CẦU CỦA GIẢNG VIÊN:
+{prompt}
+
+Hãy trả lời theo cấu trúc:
+1) Nhận xét xu hướng
+2) Điểm mạnh/yếu của lớp
+3) Gợi ý can thiệp sư phạm (3 gợi ý)
+4) Câu hỏi gợi mở để thảo luận tiếp (3 câu)
+"""
+                            res = model.generate_content(payload)
+                            st.info(res.text)
+
+            with col_reset:
+                st.markdown("###### 🗑 Xóa dữ liệu")
+                if st.button("RESET HOẠT ĐỘNG", key="btn_reset"):
+                    clear_activity(cid, current_act_key)
+                    st.toast("Đã xóa dữ liệu hoạt động")
+                    time.sleep(0.4)
                     st.rerun()
 
 # ==========================================
 # 9. ROUTER
 # ==========================================
-if page == "class_home": render_class_home()
-elif page == "dashboard": render_dashboard()
-else: render_activity()
+page = st.session_state.get("page", "class_home")
+
+if page == "class_home":
+    render_class_home()
+elif page == "dashboard":
+    render_dashboard()
+else:
+    render_activity()
