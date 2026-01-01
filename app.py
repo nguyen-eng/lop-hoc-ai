@@ -556,8 +556,8 @@ def render_activity():
 
                     # 2. HÀM MÀU SẮC MENTIMETER
                     def menti_color_func(word, font_size, position, orientation, random_state=None, **kwargs):
-                    colors = ["#00a0b0", "#cc333f", "#eb6841", "#edc951", "#6a4a3c", "#3e9fa8", "#e94e77"] 
-                    return random.choice(colors)
+                        colors = ["#00a0b0", "#cc333f", "#eb6841", "#edc951", "#6a4a3c", "#3e9fa8", "#e94e77"] 
+                        return random.choice(colors)
 
                     # 3. CẤU HÌNH WORDCLOUD
                     # Cố gắng load font đẹp (Montserrat), nếu không có thì dùng mặc định
