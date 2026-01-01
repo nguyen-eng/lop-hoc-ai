@@ -551,8 +551,7 @@ def render_activity():
             df = load_data(cid, current_act_key)
             with st.container(border=True):
                 if not df.empty:
-                   from collections import Counter
-
+from collections import Counter
 # Giữ nguyên cụm từ/câu mà học viên nhập (không tách theo khoảng trắng)
 phrases = (
     df["Nội dung"]
@@ -560,7 +559,6 @@ phrases = (
     .map(lambda x: x.strip())
     .tolist()
 )
-
 # Đếm tần suất theo đúng "cụm" (ví dụ: "Gây nên hậu quả" được tính là 1 mục)
 freq = Counter([p for p in phrases if p])
 
