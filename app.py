@@ -10,7 +10,7 @@ import threading
 import matplotlib.pyplot as plt
 from wordcloud import WordCloud
 import numpy as np
-from collections import Counter  # ✅ đưa lên đây để tránh lỗi thụt lề
+from collections import Counter
 
 # ==========================================
 # 1. CẤU HÌNH & GIAO DIỆN (UI/UX)
@@ -322,7 +322,7 @@ for i in range(1, 11):
 # ==========================================
 # 4. MÀN HÌNH ĐĂNG NHẬP (PRO)
 # ==========================================
-if not st.session_state.get("logged_in", False) or st.session_state.get("page", "login") == "login":
+if (not st.session_state.get("logged_in", False)) or (st.session_state.get("page", "login") == "login"):
     st.session_state["page"] = "login"
 
     st.markdown("<div class='hero-wrap'>", unsafe_allow_html=True)
@@ -351,7 +351,7 @@ if not st.session_state.get("logged_in", False) or st.session_state.get("page", 
 
     with tab_sv:
         c_class = st.selectbox("Chọn lớp", list(CLASSES.keys()))
-        c_pass = st.text_input("Mã lớp", type="password")  # ✅ không placeholder
+        c_pass = st.text_input("Mã lớp", type="password")  # ✅ bỏ placeholder để không lộ gợi ý
         if st.button("THAM GIA LỚP HỌC", key="btn_join"):
             cid = CLASSES[c_class]
             if c_pass.strip() == PASSWORDS[cid]:
@@ -468,7 +468,10 @@ def render_class_home():
 def render_dashboard():
     cid = st.session_state["class_id"]
     topic = CLASS_ACT_CONFIG[cid]["topic"]
-    st.markdown(f"<h2 style='color:{PRIMARY_COLOR}; border-bottom:2px solid #e2e8f0; padding-bottom:10px;'>🏠 Dashboard</h2>", unsafe_allow_html=True)
+    st.markdown(
+        f"<h2 style='color:{PRIMARY_COLOR}; border-bottom:2px solid #e2e8f0; padding-bottom:10px;'>🏠 Dashboard</h2>",
+        unsafe_allow_html=True
+    )
     st.caption(f"Chủ đề lớp: {topic}")
 
     cols = st.columns(3)
@@ -509,7 +512,7 @@ def render_activity():
     current_act_key = act
 
     # ------------------------------------------
-    # 1) WORD CLOUD  ✅ SỬA: GIỮ NGUYÊN CỤM TỪ
+    # 1) WORD CLOUD (GIỮ NGUYÊN CỤM TỪ)
     # ------------------------------------------
     if act == "wordcloud":
         c1, c2 = st.columns([1, 2])
@@ -518,12 +521,12 @@ def render_activity():
             if st.session_state["role"] == "student":
                 with st.form("f_wc"):
                     n = st.text_input("Tên")
-                    txt = st.text_input("Nhập 1 từ khóa / cụm từ")
+                    txt = st.text_input("Nhập 1 từ khóa / cụm từ (giữ nguyên, có thể có khoảng trắng)")
                     if st.form_submit_button("GỬI"):
                         if n.strip() and txt.strip():
                             save_data(cid, current_act_key, n, txt)
                             st.success("Đã gửi!")
-                            time.sleep(0.3)
+                            time.sleep(0.2)
                             st.rerun()
                         else:
                             st.warning("Vui lòng nhập đủ Tên và Từ khóa.")
@@ -535,28 +538,60 @@ def render_activity():
             df = load_data(cid, current_act_key)
             with st.container(border=True):
                 if not df.empty:
-                    # ✅ giữ nguyên cụm: mỗi dòng là 1 “phrase” (không tách theo khoảng trắng)
+                    from collections import Counter
+                    import os
+
+                    # 1) Lấy cụm từ đúng như học viên nhập (giữ nguyên, không tách)
                     phrases = (
                         df["Nội dung"]
                         .astype(str)
                         .map(lambda x: x.strip())
                         .tolist()
                     )
-                    freq = Counter([p for p in phrases if p])
+                    phrases = [p for p in phrases if p]
 
+                    # 2) Đổi space -> NBSP để WordCloud không “bẻ” cụm từ thành nhiều từ rời
+                    #    (hiển thị vẫn như khoảng trắng bình thường)
+                    phrases_nbsp = [p.replace(" ", "\u00A0") for p in phrases]
+
+                    # 3) Đếm tần suất theo đúng "cụm"
+                    freq = Counter(phrases_nbsp)
+
+                    # 4) Chọn font hỗ trợ tiếng Việt (nếu có)
+                    #    DejaVuSans thường có sẵn trên Linux/Streamlit Cloud
+                    font_path = None
+                    candidate_fonts = [
+                        "/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf",
+                        "/usr/share/fonts/truetype/dejavu/DejaVuSansCondensed.ttf",
+                        "/usr/share/fonts/truetype/freefont/FreeSans.ttf",
+                    ]
+                    for fp in candidate_fonts:
+                        if os.path.exists(fp):
+                            font_path = fp
+                            break
+
+                    # 5) Tạo WordCloud từ frequencies (Mentimeter-like: dày, phủ đều, font to hơn)
                     wc = WordCloud(
-                        width=800,
-                        height=400,
+                        width=1400,
+                        height=700,
                         background_color="white",
-                        colormap="ocean",
-                        collocations=False,
-                        prefer_horizontal=0.95
+                        font_path=font_path,
+                        collocations=False,      # không tự ghép cụm “lạ”
+                        max_words=3000,          # cho phép hiển thị nhiều
+                        prefer_horizontal=0.92,
+                        relative_scaling=0.7,    # chênh size rõ hơn (giống Mentimeter)
+                        min_font_size=14,
+                        max_font_size=160,
+                        random_state=42,
+                        margin=8,
+                        scale=2
                     ).generate_from_frequencies(freq)
 
-                    fig, ax = plt.subplots()
+                    # 6) Render lớn, full khung
+                    fig, ax = plt.subplots(figsize=(16, 8))
                     ax.imshow(wc, interpolation="bilinear")
                     ax.axis("off")
-                    st.pyplot(fig)
+                    st.pyplot(fig, use_container_width=True)
                 else:
                     st.info("Chưa có dữ liệu. Mời lớp nhập từ khóa.")
 
@@ -576,7 +611,7 @@ def render_activity():
                         if n.strip():
                             save_data(cid, current_act_key, n, vote)
                             st.success("Đã chọn!")
-                            time.sleep(0.3)
+                            time.sleep(0.2)
                             st.rerun()
                         else:
                             st.warning("Vui lòng nhập Tên.")
@@ -609,7 +644,7 @@ def render_activity():
                         if n.strip() and c.strip():
                             save_data(cid, current_act_key, n, c)
                             st.success("Đã gửi!")
-                            time.sleep(0.3)
+                            time.sleep(0.2)
                             st.rerun()
                         else:
                             st.warning("Vui lòng nhập đủ Tên và nội dung.")
@@ -619,7 +654,10 @@ def render_activity():
             with st.container(border=True, height=520):
                 if not df.empty:
                     for _, r in df.iterrows():
-                        st.markdown(f'<div class="note-card"><b>{r["Học viên"]}</b>: {r["Nội dung"]}</div>', unsafe_allow_html=True)
+                        st.markdown(
+                            f'<div class="note-card"><b>{r["Học viên"]}</b>: {r["Nội dung"]}</div>',
+                            unsafe_allow_html=True
+                        )
                 else:
                     st.info("Chưa có câu trả lời.")
 
@@ -642,7 +680,7 @@ def render_activity():
                             val = ",".join(map(str, scores))
                             save_data(cid, current_act_key, n, val)
                             st.success("Đã lưu!")
-                            time.sleep(0.3)
+                            time.sleep(0.2)
                             st.rerun()
                         else:
                             st.warning("Vui lòng nhập Tên.")
@@ -687,7 +725,7 @@ def render_activity():
                         else:
                             save_data(cid, current_act_key, n, "->".join(rank))
                             st.success("Đã nộp!")
-                            time.sleep(0.3)
+                            time.sleep(0.2)
                             st.rerun()
         with c2:
             st.markdown("##### 🏆 KẾT QUẢ")
@@ -726,7 +764,7 @@ def render_activity():
                         if n.strip():
                             save_data(cid, current_act_key, n, f"{x_val},{y_val}")
                             st.success("Đã ghim!")
-                            time.sleep(0.3)
+                            time.sleep(0.2)
                             st.rerun()
                         else:
                             st.warning("Vui lòng nhập Tên.")
@@ -811,7 +849,7 @@ Hãy trả lời theo cấu trúc:
                 if st.button("RESET HOẠT ĐỘNG", key="btn_reset"):
                     clear_activity(cid, current_act_key)
                     st.toast("Đã xóa dữ liệu hoạt động")
-                    time.sleep(0.6)
+                    time.sleep(0.4)
                     st.rerun()
 
 # ==========================================
