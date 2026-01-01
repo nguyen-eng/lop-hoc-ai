@@ -11,6 +11,7 @@ import matplotlib.pyplot as plt
 from wordcloud import WordCloud
 import numpy as np
 from collections import Counter
+from io import BytesIO
 
 # ==========================================
 # 1. CẤU HÌNH & GIAO DIỆN (UI/UX)
@@ -534,66 +535,87 @@ def render_activity():
                 st.warning("Giảng viên xem kết quả bên phải.")
 
         with c2:
-            st.markdown("##### ☁️ KẾT QUẢ")
-            df = load_data(cid, current_act_key)
-            with st.container(border=True):
-                if not df.empty:
-                    from collections import Counter
-                    import os
+    st.markdown("##### ☁️ KẾT QUẢ")
+    df = load_data(cid, current_act_key)
 
-                    # 1) Lấy cụm từ đúng như học viên nhập (giữ nguyên, không tách)
-                    phrases = (
-                        df["Nội dung"]
-                        .astype(str)
-                        .map(lambda x: x.strip())
-                        .tolist()
-                    )
-                    phrases = [p for p in phrases if p]
+    with st.container(border=True):
+        if not df.empty:
+            # =========================
+            # Mentimeter-like WordCloud
+            # - GIỮ NGUYÊN CỤM TỪ (không tách)
+            # - Màu tươi, nền trắng, bố cục cân giữa
+            # =========================
 
-                    # 2) Đổi space -> NBSP để WordCloud không “bẻ” cụm từ thành nhiều từ rời
-                    #    (hiển thị vẫn như khoảng trắng bình thường)
-                    phrases_nbsp = [p.replace(" ", "\u00A0") for p in phrases]
+            # 1) Chuẩn hóa input: giữ nguyên cụm từ/câu
+            phrases = (
+                df["Nội dung"]
+                .astype(str)
+                .map(lambda x: " ".join(x.strip().split()))  # gộp nhiều space thành 1 space
+                .tolist()
+            )
+            phrases = [p for p in phrases if p]  # bỏ rỗng
 
-                    # 3) Đếm tần suất theo đúng "cụm"
-                    freq = Counter(phrases_nbsp)
+            freq = Counter(phrases)
 
-                    # 4) Chọn font hỗ trợ tiếng Việt (nếu có)
-                    #    DejaVuSans thường có sẵn trên Linux/Streamlit Cloud
-                    font_path = None
-                    candidate_fonts = [
-                        "/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf",
-                        "/usr/share/fonts/truetype/dejavu/DejaVuSansCondensed.ttf",
-                        "/usr/share/fonts/truetype/freefont/FreeSans.ttf",
-                    ]
-                    for fp in candidate_fonts:
-                        if os.path.exists(fp):
-                            font_path = fp
-                            break
-
-                    # 5) Tạo WordCloud từ frequencies (Mentimeter-like: dày, phủ đều, font to hơn)
-                    wc = WordCloud(
-                        width=1400,
-                        height=700,
-                        background_color="white",
-                        font_path=font_path,
-                        collocations=False,      # không tự ghép cụm “lạ”
-                        max_words=3000,          # cho phép hiển thị nhiều
-                        prefer_horizontal=0.92,
-                        relative_scaling=0.7,    # chênh size rõ hơn (giống Mentimeter)
-                        min_font_size=14,
-                        max_font_size=160,
-                        random_state=42,
-                        margin=8,
-                        scale=2
-                    ).generate_from_frequencies(freq)
-
-                    # 6) Render lớn, full khung
-                    fig, ax = plt.subplots(figsize=(16, 8))
-                    ax.imshow(wc, interpolation="bilinear")
-                    ax.axis("off")
-                    st.pyplot(fig, use_container_width=True)
+            # 2) Chọn font (ưu tiên Montserrat trong repo; fallback DejaVu)
+            font_path = None
+            try:
+                import os
+                from pathlib import Path
+                candidate = Path("assets/fonts/Montserrat-SemiBold.ttf")
+                if candidate.exists():
+                    font_path = str(candidate)
                 else:
-                    st.info("Chưa có dữ liệu. Mời lớp nhập từ khóa.")
+                    # fallback: DejaVu (thường có sẵn trong môi trường Streamlit Cloud)
+                    import matplotlib
+                    font_path = str(Path(matplotlib.get_data_path()) / "fonts/ttf/DejaVuSans.ttf")
+            except:
+                font_path = None  # WordCloud vẫn chạy, nhưng có thể kém đẹp
+
+            # 3) Bảng màu kiểu “Mentimeter-ish”
+            menti_palette = [
+                "#00BFA5",  # teal
+                "#2E7DFF",  # blue
+                "#7C4DFF",  # purple
+                "#FF4D8D",  # pink
+                "#FFB300",  # amber
+                "#00C853",  # green
+                "#FF6D00",  # orange
+            ]
+
+            def menti_color_func(word, font_size, position, orientation, random_state=None, **kwargs):
+                # chọn màu theo hash để ổn định (không nhảy màu mỗi lần rerun)
+                idx = abs(hash(word)) % len(menti_palette)
+                return menti_palette[idx]
+
+            # 4) Tạo WordCloud (ưu tiên bố cục thoáng + chữ “đậm” hơn)
+            wc = WordCloud(
+                width=1200,
+                height=650,
+                background_color="white",
+                mode="RGB",
+                collocations=False,          # không tự ghép từ
+                prefer_horizontal=0.96,
+                relative_scaling=0.35,
+                max_words=80,
+                min_font_size=14,
+                max_font_size=170,
+                margin=8,
+                random_state=42,             # cố định bố cục
+                font_path=font_path,
+            ).generate_from_frequencies(freq)
+
+            wc = wc.recolor(color_func=menti_color_func, random_state=42)
+
+            # 5) Render sắc nét như Mentimeter: xuất PNG từ PIL (không qua matplotlib để tránh “mờ”)
+            img = wc.to_image()
+
+            buf = BytesIO()
+            img.save(buf, format="PNG", optimize=True)
+            st.image(buf.getvalue(), use_container_width=True)
+
+        else:
+            st.info("Chưa có dữ liệu. Mời lớp nhập từ khóa.")
 
     # ------------------------------------------
     # 2) POLL
