@@ -33,8 +33,7 @@ BG_COLOR = "#f0f2f5"
 TEXT_COLOR = "#111827"
 MUTED = "#64748b"
 
-st.markdown(
-    f"""
+st.markdown(f"""
 <style>
     @import url('https://fonts.googleapis.com/css2?family=Montserrat:wght@400;500;600;700;800&display=swap');
 
@@ -183,16 +182,14 @@ st.markdown(
         font-size: 13px;
     }}
 </style>
-""",
-    unsafe_allow_html=True
-)
+""", unsafe_allow_html=True)
 
 # --- KẾT NỐI AI ---
 try:
     api_key = st.secrets["GEMINI_API_KEY"]
     genai.configure(api_key=api_key)
-    model = genai.GenerativeModel("gemini-2.5-flash")
-except Exception:
+    model = genai.GenerativeModel('gemini-2.5-flash')
+except:
     model = None
 
 # ==========================================
@@ -238,7 +235,7 @@ def load_data(cls, act):
     if os.path.exists(path):
         try:
             return pd.read_csv(path, sep="|", names=["Học viên", "Nội dung", "Thời gian"])
-        except Exception:
+        except:
             return pd.DataFrame(columns=["Học viên", "Nội dung", "Thời gian"])
     return pd.DataFrame(columns=["Học viên", "Nội dung", "Thời gian"])
 
@@ -282,12 +279,7 @@ for i in range(1, 11):
         poll_correct = "Nguyên cớ"
         open_q = "Hãy viết 3–5 câu: phân biệt *nguyên nhân – nguyên cớ – điều kiện* trong một vụ án giả định (tự chọn)."
         criteria = ["Nhận diện nguyên nhân", "Nhận diện nguyên cớ", "Nhận diện điều kiện", "Lập luận logic"]
-        rank_items = [
-            "Thu thập dấu vết vật chất",
-            "Xác minh chuỗi nguyên nhân",
-            "Loại bỏ 'nguyên cớ' ngụy biện",
-            "Kiểm tra điều kiện cần/đủ",
-        ]
+        rank_items = ["Thu thập dấu vết vật chất", "Xác minh chuỗi nguyên nhân", "Loại bỏ 'nguyên cớ' ngụy biện", "Kiểm tra điều kiện cần/đủ"]
         pin_q = "Ghim 'điểm nóng' nơi dễ phát sinh nguyên cớ (kích động, tin đồn...) trong một sơ đồ lớp/bản đồ."
     elif cid in ["lop3", "lop4"]:
         wc_q = "1 từ khóa mô tả đúng nhất 'tính kế thừa' trong phủ định biện chứng?"
@@ -343,8 +335,7 @@ if (not st.session_state.get("logged_in", False)) or (st.session_state.get("page
     st.session_state["page"] = "login"
 
     st.markdown("<div class='hero-wrap'>", unsafe_allow_html=True)
-    st.markdown(
-        """
+    st.markdown("""
         <div class="hero-card">
             <div class="hero-top">
                 <div class="hero-badge">
@@ -352,7 +343,7 @@ if (not st.session_state.get("logged_in", False)) or (st.session_state.get("page
                 </div>
                 <div>
                     <p class="hero-title">TRƯỜNG ĐẠI HỌC CẢNH SÁT NHÂN DÂN</p>
-                    <p class="hero-sub">Hệ thống tương tác lớp học</p>
+                    <p class="hero-sub">Hệ thống tương tác lớp học </p>
                 </div>
             </div>
             <div class="hero-body">
@@ -362,18 +353,14 @@ if (not st.session_state.get("logged_in", False)) or (st.session_state.get("page
                 </div>
             </div>
         </div>
-    """.format(
-            logo=LOGO_URL
-        ),
-        unsafe_allow_html=True,
-    )
+    """.format(logo=LOGO_URL), unsafe_allow_html=True)
 
     st.write("")
     tab_sv, tab_gv = st.tabs(["CỔNG HỌC VIÊN", "CỔNG GIẢNG VIÊN"])
 
     with tab_sv:
         c_class = st.selectbox("Chọn lớp", list(CLASSES.keys()))
-        c_pass = st.text_input("Mã lớp", type="password")
+        c_pass = st.text_input("Mã lớp", type="password")  # ✅ bỏ placeholder để không lộ gợi ý
         if st.button("THAM GIA LỚP HỌC", key="btn_join"):
             cid = CLASSES[c_class]
             if c_pass.strip() == PASSWORDS[cid]:
@@ -435,17 +422,14 @@ def render_class_home():
     cls_txt = [k for k, v in CLASSES.items() if v == cid][0]
 
     st.markdown("<div class='list-wrap'>", unsafe_allow_html=True)
-    st.markdown(
-        f"""
+    st.markdown(f"""
         <div class="list-header">
             <div>
                 <p class="list-title">📚 Danh mục hoạt động của lớp</p>
                 <p class="list-sub"><b>{cls_txt}</b> • Chủ đề: {topic}</p>
             </div>
         </div>
-    """,
-        unsafe_allow_html=True,
-    )
+    """, unsafe_allow_html=True)
 
     c_back, c_space = st.columns([1, 5])
     with c_back:
@@ -475,15 +459,12 @@ def render_class_home():
 
         colL, colR = st.columns([6, 1])
         with colL:
-            st.markdown(
-                f"""
+            st.markdown(f"""
                 <div class="act-row">
                     <p class="act-name">{a["name"]}</p>
                     <p class="act-meta">Loại hoạt động: {a["type"]} • Số lượt trả lời: <b>{count}</b></p>
                 </div>
-            """,
-                unsafe_allow_html=True,
-            )
+            """, unsafe_allow_html=True)
         with colR:
             if st.button("MỞ", key=f"open_{ksuffix}"):
                 open_activity(act_key)
@@ -498,7 +479,7 @@ def render_dashboard():
     topic = CLASS_ACT_CONFIG[cid]["topic"]
     st.markdown(
         f"<h2 style='color:{PRIMARY_COLOR}; border-bottom:2px solid #e2e8f0; padding-bottom:10px;'>🏠 Dashboard</h2>",
-        unsafe_allow_html=True,
+        unsafe_allow_html=True
     )
     st.caption(f"Chủ đề lớp: {topic}")
 
@@ -509,15 +490,12 @@ def render_dashboard():
     for i, act in enumerate(activities):
         df = load_data(cid, act)
         with cols[i % 3]:
-            st.markdown(
-                f"""
+            st.markdown(f"""
             <div class="viz-card" style="text-align:center;">
                 <h1 style="color:{PRIMARY_COLOR}; margin:0; font-size:40px;">{len(df)}</h1>
                 <p style="color:{MUTED}; font-weight:800; text-transform:uppercase;">{names[i]}</p>
             </div>
-            """,
-                unsafe_allow_html=True,
-            )
+            """, unsafe_allow_html=True)
 
     st.caption("Gợi ý: dùng sidebar → “Danh mục hoạt động” để mở hoạt động như Mentimeter.")
 
@@ -537,13 +515,13 @@ def render_activity():
     with topR:
         st.markdown(
             f"<h2 style='color:{PRIMARY_COLOR}; border-bottom:2px solid #e2e8f0; padding-bottom:10px;'>{cfg['name']}</h2>",
-            unsafe_allow_html=True,
+            unsafe_allow_html=True
         )
 
     current_act_key = act
 
     # ------------------------------------------
-    # 1) WORD CLOUD (Mentimeter-like, D3 Cloud, spiral + stable + animate)
+    # 1) WORD CLOUD (Mentimeter-like)
     # ------------------------------------------
     if act == "wordcloud":
         c1, c2 = st.columns([1, 2])
@@ -571,39 +549,42 @@ def render_activity():
             st.markdown("##### ☁️ KẾT QUẢ")
             df = load_data(cid, current_act_key)
 
-            with st.container(border=True):
-                if df.empty:
+            if df.empty:
+                with st.container(border=True):
                     st.info("Chưa có dữ liệu. Mời lớp nhập từ khóa.")
-                else:
-                    import re, json
+            else:
+                import re, json
 
-                    def normalize_phrase(s: str) -> str:
-                        s = str(s or "").strip().lower()
-                        s = re.sub(r"\s+", " ", s)
-                        s = s.strip(" .,:;!?\"'`()[]{}<>|\\/+-=*#@~^_")
-                        return s
+                def normalize_phrase(s: str) -> str:
+                    s = str(s or "").strip().lower()
+                    s = re.sub(r"\s+", " ", s)
+                    s = s.strip(" .,:;!?\"'`()[]{}<>|\\/+-=*#@~^_")
+                    return s
 
-                    # 1) Đếm theo SỐ NGƯỜI (unique học viên) cho mỗi phrase
-                    tmp = df[["Học viên", "Nội dung"]].dropna().copy()
-                    tmp["Học viên"] = tmp["Học viên"].astype(str).str.strip()
-                    tmp["phrase"] = tmp["Nội dung"].astype(str).apply(normalize_phrase)
-                    tmp = tmp[(tmp["Học viên"] != "") & (tmp["phrase"] != "")]
-                    tmp = tmp.drop_duplicates(subset=["Học viên", "phrase"])
+                # 1) Đếm theo SỐ NGƯỜI (unique học viên) cho mỗi phrase
+                tmp = df[["Học viên", "Nội dung"]].dropna().copy()
+                tmp["Học viên"] = tmp["Học viên"].astype(str).str.strip()
+                tmp["phrase"] = tmp["Nội dung"].astype(str).apply(normalize_phrase)
+                tmp = tmp[(tmp["Học viên"] != "") & (tmp["phrase"] != "")]
+                tmp = tmp.drop_duplicates(subset=["Học viên", "phrase"])
 
-                    freq = tmp["phrase"].value_counts().to_dict()
+                freq = tmp["phrase"].value_counts().to_dict()
 
-                    if not freq:
+                if not freq:
+                    with st.container(border=True):
                         st.info("Chưa có từ/cụm hợp lệ sau khi chuẩn hoá.")
-                    else:
-                        MAX_WORDS_SHOW = 80
-                        items = sorted(freq.items(), key=lambda x: x[1], reverse=True)[:MAX_WORDS_SHOW]
-                        words_payload = [{"text": k, "value": int(v)} for k, v in items]
-                        words_json = json.dumps(words_payload, ensure_ascii=False)
+                else:
+                    MAX_WORDS_SHOW = 80
+                    items = sorted(freq.items(), key=lambda x: x[1], reverse=True)[:MAX_WORDS_SHOW]
+                    words_payload = [{"text": k, "value": int(v)} for k, v in items]
+                    words_json = json.dumps(words_payload, ensure_ascii=False)
 
-                        total_answers = int(df["Nội dung"].dropna().shape[0])
-                        total_people = int(tmp["Học viên"].nunique())
-                        total_unique_phrases = int(len(freq))
+                    total_answers = int(df["Nội dung"].dropna().shape[0])
+                    total_people = int(tmp["Học viên"].nunique())
+                    total_unique_phrases = int(len(freq))
 
+                    # ✅ TÁCH WORDCLOUD RA 1 COMPONENT RIÊNG (để fullscreen phóng to đúng cloud)
+                    with st.container(border=True):
                         comp_html = """
 <!doctype html>
 <html>
@@ -639,6 +620,7 @@ def render_activity():
     const W = wrap.clientWidth || 900;
     const H = wrap.clientHeight || 520;
 
+    // Stable RNG for layout stability (less jumping)
     function mulberry32(a) {
       return function() {
         var t = a += 0x6D2B79F5;
@@ -649,12 +631,14 @@ def render_activity():
     }
     const rng = mulberry32(42);
 
+    // Log scale for font sizes. vmax==vmin => all same size.
     const vals = data.map(d => d.value);
     const vmin = Math.max(1, d3.min(vals));
     const vmax = Math.max(1, d3.max(vals));
 
     let fontScale;
     if (vmax === vmin) {
+      // tất cả cùng 1 vote => cùng size (tránh chữ to/nhỏ vô lý)
       fontScale = () => 64;
     } else {
       fontScale = d3.scaleLog()
@@ -663,10 +647,12 @@ def render_activity():
         .clamp(true);
     }
 
+    // Orientation: 70% horizontal, 30% vertical (-90)
     function rotateFn() {
       return (rng() < 0.70) ? 0 : -90;
     }
 
+    // Modern/Vibrant color using golden ratio hue
     const GOLDEN_RATIO = 0.61803398875;
     let hue = 0.12;
 
@@ -698,6 +684,7 @@ def render_activity():
     const g = svg.append("g")
       .attr("transform", `translate(${W/2},${H/2})`);
 
+    // Keep previous positions for smooth transitions
     const prev = new Map();
     try {
       const saved = sessionStorage.getItem("wc_prev");
@@ -728,15 +715,42 @@ def render_activity():
     layout.on("end", draw);
     layout.start();
 
-    function draw(placed) {
-      const top = placed[0];
-      const dx = top ? -top.x : 0;
-      const dy = top ? -top.y : 0;
+    // ✅ CĂN GIỮA THEO BOUNDING-BOX (không dạt về 1 góc phần tư)
+    function centerByBBox(placed) {
+      let minX = Infinity, maxX = -Infinity, minY = Infinity, maxY = -Infinity;
+
       placed.forEach(w => {
-        w.x = w.x + dx;
-        w.y = w.y + dy;
+        // d3-cloud thường có w.width / w.height
+        const ww = (w.width || 0);
+        const hh = (w.height || 0);
+        const x0 = w.x - ww / 2;
+        const x1 = w.x + ww / 2;
+        const y0 = w.y - hh / 2;
+        const y1 = w.y + hh / 2;
+
+        minX = Math.min(minX, x0);
+        maxX = Math.max(maxX, x1);
+        minY = Math.min(minY, y0);
+        maxY = Math.max(maxY, y1);
       });
 
+      if (!isFinite(minX) || !isFinite(minY)) return placed;
+
+      const cx = (minX + maxX) / 2;
+      const cy = (minY + maxY) / 2;
+
+      placed.forEach(w => {
+        w.x = w.x - cx;
+        w.y = w.y - cy;
+      });
+
+      return placed;
+    }
+
+    function draw(placed) {
+      placed = centerByBBox(placed);
+
+      // Colors with stability
       let prevHue = null;
       const colorMap = new Map();
       placed.forEach(w => {
@@ -808,14 +822,15 @@ def render_activity():
 </html>
 """
                         comp_html = comp_html.replace("__WORDS_JSON__", words_json)
-
                         st.components.v1.html(comp_html, height=540, scrolling=False)
 
-                        st.caption(
-                            f"👥 Lượt gửi: **{total_answers}** • 👤 Người tham gia (unique): **{total_people}** • 🧩 Cụm duy nhất: **{total_unique_phrases}**"
-                        )
+                    # ✅ caption + bảng nằm ngoài component wordcloud => fullscreen chỉ phóng to cloud
+                    st.caption(
+                        f"👥 Lượt gửi: **{total_answers}** • 👤 Người tham gia (unique): **{total_people}** • 🧩 Cụm duy nhất: **{total_unique_phrases}**"
+                    )
 
-                        topk = pd.DataFrame(items[:20], columns=["Từ/cụm (chuẩn hoá)", "Số người nhập"])
+                    topk = pd.DataFrame(items[:20], columns=["Từ/cụm (chuẩn hoá)", "Số người nhập"])
+                    with st.container(border=True):
                         st.dataframe(topk, use_container_width=True, hide_index=True)
 
     # ------------------------------------------
@@ -879,7 +894,7 @@ def render_activity():
                     for _, r in df.iterrows():
                         st.markdown(
                             f'<div class="note-card"><b>{r["Học viên"]}</b>: {r["Nội dung"]}</div>',
-                            unsafe_allow_html=True,
+                            unsafe_allow_html=True
                         )
                 else:
                     st.info("Chưa có câu trả lời.")
@@ -918,12 +933,12 @@ def render_activity():
                             data_matrix.append([int(x) for x in str(item).split(",")])
                         avg_scores = np.mean(data_matrix, axis=0)
 
-                        fig = go.Figure(
-                            data=go.Scatterpolar(r=avg_scores, theta=criteria, fill="toself", name="Lớp")
-                        )
+                        fig = go.Figure(data=go.Scatterpolar(
+                            r=avg_scores, theta=criteria, fill='toself', name='Lớp'
+                        ))
                         fig.update_layout(polar=dict(radialaxis=dict(visible=True, range=[0, 5])), showlegend=False)
                         st.plotly_chart(fig, use_container_width=True)
-                    except Exception:
+                    except:
                         st.error("Dữ liệu lỗi định dạng.")
                 else:
                     st.info("Chưa có dữ liệu thang đo.")
@@ -965,8 +980,8 @@ def render_activity():
                     labels = [x[0] for x in sorted_items]
                     vals = [x[1] for x in sorted_items]
 
-                    fig = px.bar(x=vals, y=labels, orientation="h", labels={"x": "Tổng điểm", "y": "Mục"}, text=vals)
-                    fig.update_layout(yaxis={"categoryorder": "total ascending"})
+                    fig = px.bar(x=vals, y=labels, orientation='h', labels={'x': 'Tổng điểm', 'y': 'Mục'}, text=vals)
+                    fig.update_layout(yaxis={'categoryorder': 'total ascending'})
                     st.plotly_chart(fig, use_container_width=True)
                 else:
                     st.info("Chưa có xếp hạng.")
@@ -1004,38 +1019,25 @@ def render_activity():
                             ys.append(int(coords[1]))
 
                         fig = go.Figure()
-                        fig.add_trace(
-                            go.Scatter(
-                                x=xs,
-                                y=ys,
-                                mode="markers",
-                                marker=dict(size=12, color="red", opacity=0.7, line=dict(width=1, color="white")),
-                                name="Vị trí",
-                            )
-                        )
+                        fig.add_trace(go.Scatter(
+                            x=xs, y=ys, mode='markers',
+                            marker=dict(size=12, color='red', opacity=0.7, line=dict(width=1, color='white')),
+                            name='Vị trí'
+                        ))
 
                         fig.update_layout(
                             xaxis=dict(range=[0, 100], showgrid=False, zeroline=False, visible=False),
                             yaxis=dict(range=[0, 100], showgrid=False, zeroline=False, visible=False),
-                            images=[
-                                dict(
-                                    source=cfg.get("image", MAP_IMAGE),
-                                    xref="x",
-                                    yref="y",
-                                    x=0,
-                                    y=100,
-                                    sizex=100,
-                                    sizey=100,
-                                    sizing="stretch",
-                                    layer="below",
-                                )
-                            ],
-                            width=700,
-                            height=420,
-                            margin=dict(l=0, r=0, t=0, b=0),
+                            images=[dict(
+                                source=cfg.get("image", MAP_IMAGE),
+                                xref="x", yref="y",
+                                x=0, y=100, sizex=100, sizey=100,
+                                sizing="stretch", layer="below"
+                            )],
+                            width=700, height=420, margin=dict(l=0, r=0, t=0, b=0)
                         )
                         st.plotly_chart(fig, use_container_width=True)
-                    except Exception:
+                    except:
                         st.error("Lỗi dữ liệu ghim.")
                 else:
                     st.info("Chưa có ghim nào.")
