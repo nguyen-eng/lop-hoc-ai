@@ -181,6 +181,15 @@ st.markdown(f"""
         font-weight: 600;
         font-size: 13px;
     }}
+
+    /* Simple toolbar for wordcloud */
+    .wc-toolbar {{
+        display:flex;
+        align-items:center;
+        justify-content:space-between;
+        gap:10px;
+        margin: 4px 0 8px 0;
+    }}
 </style>
 """, unsafe_allow_html=True)
 
@@ -216,10 +225,12 @@ if "page" not in st.session_state:
 if "current_act_key" not in st.session_state:
     st.session_state["current_act_key"] = "dashboard"
 
+# wordcloud fullscreen flag
+if "wc_fullscreen" not in st.session_state:
+    st.session_state["wc_fullscreen"] = False
 
 def get_path(cls, act):
     return f"data_{cls}_{act}.csv"
-
 
 def save_data(cls, act, name, content):
     content = str(content).replace("|", "-").replace("\n", " ")
@@ -228,7 +239,6 @@ def save_data(cls, act, name, content):
     with data_lock:
         with open(get_path(cls, act), "a", encoding="utf-8") as f:
             f.write(row)
-
 
 def load_data(cls, act):
     path = get_path(cls, act)
@@ -239,18 +249,15 @@ def load_data(cls, act):
             return pd.DataFrame(columns=["Học viên", "Nội dung", "Thời gian"])
     return pd.DataFrame(columns=["Học viên", "Nội dung", "Thời gian"])
 
-
 def clear_activity(cls, act):
     with data_lock:
         path = get_path(cls, act)
         if os.path.exists(path):
             os.remove(path)
 
-
 def reset_to_login():
     st.session_state.clear()
     st.rerun()
-
 
 # ==========================================
 # 3. CẤU HÌNH HOẠT ĐỘNG THEO LỚP (Mentimeter-like)
@@ -265,7 +272,6 @@ def class_topic(cid: str) -> str:
     if cid in ["lop7", "lop8"]:
         return "Triết học về con người: cá nhân – xã hội; vấn đề con người trong Việt Nam"
     return "Triết học Mác-xít (tổng quan các vấn đề cơ bản)"
-
 
 CLASS_ACT_CONFIG = {}
 for i in range(1, 11):
@@ -360,7 +366,7 @@ if (not st.session_state.get("logged_in", False)) or (st.session_state.get("page
 
     with tab_sv:
         c_class = st.selectbox("Chọn lớp", list(CLASSES.keys()))
-        c_pass = st.text_input("Mã lớp", type="password")  # ✅ bỏ placeholder để không lộ gợi ý
+        c_pass = st.text_input("Mã lớp", type="password")
         if st.button("THAM GIA LỚP HỌC", key="btn_join"):
             cid = CLASSES[c_class]
             if c_pass.strip() == PASSWORDS[cid]:
@@ -522,11 +528,13 @@ def render_activity():
 
     # ------------------------------------------
     # 1) WORD CLOUD (Mentimeter-like)
+    # - Fix 1: Luôn căn giữa theo bounding box (không bị dồn 1 góc phần tư)
+    # - Fix 2: Fullscreen phóng to ĐÁM MÂY TỪ (nút riêng), không phải bảng danh sách
+    # - Fix 3: Không còn IndentationError (toàn bộ block được thụt chuẩn)
     # ------------------------------------------
     if act == "wordcloud":
         c1, c2 = st.columns([1, 2])
 
-        # --- CỘT TRÁI: NHẬP LIỆU ---
         with c1:
             st.info(f"Câu hỏi: **{cfg['question']}**")
             if st.session_state["role"] == "student":
@@ -544,47 +552,53 @@ def render_activity():
             else:
                 st.warning("Giảng viên xem kết quả bên phải.")
 
-        # --- CỘT PHẢI: HIỂN THỊ KẾT QUẢ ---
         with c2:
             st.markdown("##### ☁️ KẾT QUẢ")
             df = load_data(cid, current_act_key)
 
-            if df.empty:
-                with st.container(border=True):
+            # Toolbar: nút fullscreen riêng cho WORDCLOUD
+            left_tb, right_tb = st.columns([3, 1])
+            with left_tb:
+                st.caption("Mẹo: Nhấn **Fullscreen Word Cloud** để phóng to đám mây từ.")
+            with right_tb:
+                if st.button("⛶ Fullscreen Word Cloud", key="btn_wc_fullscreen"):
+                    st.session_state["wc_fullscreen"] = True
+                    st.rerun()
+
+            import re, json
+
+            def normalize_phrase(s: str) -> str:
+                s = str(s or "").strip().lower()
+                s = re.sub(r"\s+", " ", s)
+                s = s.strip(" .,:;!?\"'`()[]{}<>|\\/+-=*#@~^_")
+                return s
+
+            with st.container(border=True):
+                if df.empty:
                     st.info("Chưa có dữ liệu. Mời lớp nhập từ khóa.")
-            else:
-                import re, json
-
-                def normalize_phrase(s: str) -> str:
-                    s = str(s or "").strip().lower()
-                    s = re.sub(r"\s+", " ", s)
-                    s = s.strip(" .,:;!?\"'`()[]{}<>|\\/+-=*#@~^_")
-                    return s
-
-                # 1) Đếm theo SỐ NGƯỜI (unique học viên) cho mỗi phrase
-                tmp = df[["Học viên", "Nội dung"]].dropna().copy()
-                tmp["Học viên"] = tmp["Học viên"].astype(str).str.strip()
-                tmp["phrase"] = tmp["Nội dung"].astype(str).apply(normalize_phrase)
-                tmp = tmp[(tmp["Học viên"] != "") & (tmp["phrase"] != "")]
-                tmp = tmp.drop_duplicates(subset=["Học viên", "phrase"])
-
-                freq = tmp["phrase"].value_counts().to_dict()
-
-                if not freq:
-                    with st.container(border=True):
-                        st.info("Chưa có từ/cụm hợp lệ sau khi chuẩn hoá.")
                 else:
-                    MAX_WORDS_SHOW = 80
-                    items = sorted(freq.items(), key=lambda x: x[1], reverse=True)[:MAX_WORDS_SHOW]
-                    words_payload = [{"text": k, "value": int(v)} for k, v in items]
-                    words_json = json.dumps(words_payload, ensure_ascii=False)
+                    tmp = df[["Học viên", "Nội dung"]].dropna().copy()
+                    tmp["Học viên"] = tmp["Học viên"].astype(str).str.strip()
+                    tmp["phrase"] = tmp["Nội dung"].astype(str).apply(normalize_phrase)
+                    tmp = tmp[(tmp["Học viên"] != "") & (tmp["phrase"] != "")]
+                    # unique theo NGƯỜI để đúng mentimeter-style: 1 người nhập 1 phrase chỉ tính 1
+                    tmp = tmp.drop_duplicates(subset=["Học viên", "phrase"])
 
-                    total_answers = int(df["Nội dung"].dropna().shape[0])
-                    total_people = int(tmp["Học viên"].nunique())
-                    total_unique_phrases = int(len(freq))
+                    freq = tmp["phrase"].value_counts().to_dict()
 
-                    # ✅ TÁCH WORDCLOUD RA 1 COMPONENT RIÊNG (để fullscreen phóng to đúng cloud)
-                    with st.container(border=True):
+                    if not freq:
+                        st.info("Chưa có từ/cụm hợp lệ sau khi chuẩn hoá.")
+                    else:
+                        MAX_WORDS_SHOW = 80
+                        items = sorted(freq.items(), key=lambda x: x[1], reverse=True)[:MAX_WORDS_SHOW]
+                        words_payload = [{"text": k, "value": int(v)} for k, v in items]
+                        words_json = json.dumps(words_payload, ensure_ascii=False)
+
+                        total_answers = int(df["Nội dung"].dropna().shape[0])
+                        total_people = int(tmp["Học viên"].nunique())
+                        total_unique_phrases = int(len(freq))
+
+                        # HTML component for wordcloud (centered by bounding-box)
                         comp_html = """
 <!doctype html>
 <html>
@@ -594,7 +608,7 @@ def render_activity():
     body { margin:0; background:white; }
     #wc-wrap {
       width: 100%;
-      height: 520px;
+      height: __HEIGHT__px;
       border-radius: 12px;
       background: #ffffff;
       overflow: hidden;
@@ -618,7 +632,7 @@ def render_activity():
 
     const wrap = document.getElementById("wc-wrap");
     const W = wrap.clientWidth || 900;
-    const H = wrap.clientHeight || 520;
+    const H = wrap.clientHeight || __HEIGHT__;
 
     // Stable RNG for layout stability (less jumping)
     function mulberry32(a) {
@@ -638,8 +652,7 @@ def render_activity():
 
     let fontScale;
     if (vmax === vmin) {
-      // tất cả cùng 1 vote => cùng size (tránh chữ to/nhỏ vô lý)
-      fontScale = () => 64;
+      fontScale = () => 64; // tất cả 1 vote => cùng size (tránh to/nhỏ vô lý)
     } else {
       fontScale = d3.scaleLog()
         .domain([vmin, vmax])
@@ -652,14 +665,12 @@ def render_activity():
       return (rng() < 0.70) ? 0 : -90;
     }
 
-    // Modern/Vibrant color using golden ratio hue
+    // Modern color palette using golden ratio hue (stable-ish)
     const GOLDEN_RATIO = 0.61803398875;
     let hue = 0.12;
-
     function nextColor(prevHue) {
       hue = (hue + GOLDEN_RATIO) % 1.0;
       let h = hue * 360;
-
       if (prevHue !== null) {
         const diff = Math.abs(h - prevHue);
         if (diff < 22) h = (h + 35) % 360;
@@ -715,26 +726,23 @@ def render_activity():
     layout.on("end", draw);
     layout.start();
 
-    // ✅ CĂN GIỮA THEO BOUNDING-BOX (không dạt về 1 góc phần tư)
     function centerByBBox(placed) {
+      // d3-cloud gives x,y relative to center. Use width/height for bbox.
       let minX = Infinity, maxX = -Infinity, minY = Infinity, maxY = -Infinity;
 
       placed.forEach(w => {
-        // d3-cloud thường có w.width / w.height
         const ww = (w.width || 0);
         const hh = (w.height || 0);
-        const x0 = w.x - ww / 2;
-        const x1 = w.x + ww / 2;
-        const y0 = w.y - hh / 2;
-        const y1 = w.y + hh / 2;
-
-        minX = Math.min(minX, x0);
-        maxX = Math.max(maxX, x1);
-        minY = Math.min(minY, y0);
-        maxY = Math.max(maxY, y1);
+        const x0 = w.x - ww/2, x1 = w.x + ww/2;
+        const y0 = w.y - hh/2, y1 = w.y + hh/2;
+        if (x0 < minX) minX = x0;
+        if (x1 > maxX) maxX = x1;
+        if (y0 < minY) minY = y0;
+        if (y1 > maxY) maxY = y1;
       });
 
-      if (!isFinite(minX) || !isFinite(minY)) return placed;
+      // If bbox invalid, do nothing
+      if (!isFinite(minX) || !isFinite(maxX) || !isFinite(minY) || !isFinite(maxY)) return placed;
 
       const cx = (minX + maxX) / 2;
       const cy = (minY + maxY) / 2;
@@ -748,6 +756,7 @@ def render_activity():
     }
 
     function draw(placed) {
+      // FIX: always center by full bounding box => không bị nhảy về 1 góc phần tư
       placed = centerByBBox(placed);
 
       // Colors with stability
@@ -821,17 +830,30 @@ def render_activity():
 </body>
 </html>
 """
-                        comp_html = comp_html.replace("__WORDS_JSON__", words_json)
-                        st.components.v1.html(comp_html, height=540, scrolling=False)
+                        comp_html_small = comp_html.replace("__WORDS_JSON__", words_json).replace("__HEIGHT__", "520")
+                        st.components.v1.html(comp_html_small, height=540, scrolling=False)
 
-                    # ✅ caption + bảng nằm ngoài component wordcloud => fullscreen chỉ phóng to cloud
-                    st.caption(
-                        f"👥 Lượt gửi: **{total_answers}** • 👤 Người tham gia (unique): **{total_people}** • 🧩 Cụm duy nhất: **{total_unique_phrases}**"
-                    )
+                        # ✅ FIX INDENTATION: caption/table nằm đúng trong block else
+                        st.caption(
+                            f"👥 Lượt gửi: **{total_answers}** • 👤 Người tham gia (unique): **{total_people}** • 🧩 Cụm duy nhất: **{total_unique_phrases}**"
+                        )
 
-                    topk = pd.DataFrame(items[:20], columns=["Từ/cụm (chuẩn hoá)", "Số người nhập"])
-                    with st.container(border=True):
-                        st.dataframe(topk, use_container_width=True, hide_index=True)
+                        # ✅ FIX FULLSCREEN: dùng st.table để không còn nút fullscreen của dataframe
+                        topk = pd.DataFrame(items[:20], columns=["Từ/cụm (chuẩn hoá)", "Số người nhập"])
+                        st.table(topk)
+
+                        # Fullscreen dialog (phóng to đúng ĐÁM MÂY TỪ)
+                        if st.session_state.get("wc_fullscreen", False):
+                            @st.dialog("Word Cloud – Fullscreen", width="large")
+                            def wc_dialog(words_json_inner: str):
+                                st.caption("Nhấn ESC hoặc đóng hộp thoại để quay lại.")
+                                comp_html_big = comp_html.replace("__WORDS_JSON__", words_json_inner).replace("__HEIGHT__", "820")
+                                st.components.v1.html(comp_html_big, height=860, scrolling=False)
+                                if st.button("Đóng", key="btn_close_wc_dialog"):
+                                    st.session_state["wc_fullscreen"] = False
+                                    st.rerun()
+
+                            wc_dialog(words_json)
 
     # ------------------------------------------
     # 2) POLL
