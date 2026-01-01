@@ -533,43 +533,61 @@ def render_activity():
                             st.warning("Vui lòng nhập đủ Tên và Từ khóa.")
             else:
                 st.warning("Giảng viên xem kết quả bên phải.")
-
         with c2:
             st.markdown("##### ☁️ KẾT QUẢ")
             df = load_data(cid, current_act_key)
             with st.container(border=True):
                 if not df.empty:
                     # =========================
-                    # Mentimeter-like WordCloud
-                    # - GIỮ NGUYÊN CỤM TỪ (không tách)
-                    # - Màu tươi, nền trắng, bố cục cân giữa
+                    # Mentimeter-like WordCloud (tự layout)
+                    # - SIZE theo TẦN SUẤT (đúng logic Mentimeter)
+                    # - cùng tần suất => cùng font size
+                    # - ưu tiên ngang, màu tươi, nền trắng
+                    # - render PIL để nét trên Streamlit Cloud
                     # =========================
+                    from PIL import Image, ImageDraw, ImageFont
+                    import math
+                    import random
+                    from pathlib import Path
 
-                    # 1) Chuẩn hóa input: giữ nguyên cụm từ/câu
+                    # 1) Chuẩn hoá: giữ nguyên CỤM TỪ (không tách)
                     phrases = (
                         df["Nội dung"]
                         .astype(str)
-                        .map(lambda x: " ".join(x.strip().split()))  # gộp nhiều space thành 1 space
+                        .map(lambda x: " ".join(x.strip().split()))  # gom nhiều space
                         .tolist()
                     )
-                    phrases = [p for p in phrases if p]  # bỏ rỗng
+                    # lọc rỗng
+                    phrases = [p for p in phrases if p]
 
-                    freq = Counter(phrases)
+                    # (khuyến nghị) chuẩn hoá nhẹ để tránh "trước sau" vs "trước  sau"
+                    # bạn có thể bổ sung .lower() nếu muốn gộp hoa/thường:
+                    # phrases = [p.lower() for p in phrases]
 
-                    # 2) Chọn font (ưu tiên Montserrat trong repo; fallback DejaVu)
-                    font_path = None
-                    try:
-                        from pathlib import Path
-                        candidate = Path("assets/fonts/Montserrat-SemiBold.ttf")
-                        if candidate.exists():
-                            font_path = str(candidate)
-                        else:
+                    freq = Counter(phrases)  # tần suất theo đúng cụm từ
+
+                    # 2) Font: ưu tiên Montserrat nếu có (Streamlit Cloud: fallback DejaVu)
+                    def pick_font():
+                        # nếu bạn có font trong repo: assets/fonts/Montserrat-SemiBold.ttf
+                        cand = Path("assets/fonts/Montserrat-SemiBold.ttf")
+                        if cand.exists():
+                            return str(cand)
+
+                        # fallback DejaVu (thường có sẵn)
+                        try:
                             import matplotlib
-                            font_path = str(Path(matplotlib.get_data_path()) / "fonts/ttf/DejaVuSans.ttf")
-                    except:
-                        font_path = None  # WordCloud vẫn chạy, nhưng có thể kém đẹp
+                            dejavu = Path(matplotlib.get_data_path()) / "fonts/ttf/DejaVuSans.ttf"
+                            if dejavu.exists():
+                                return str(dejavu)
+                        except:
+                            pass
 
-                    # 3) Bảng màu kiểu “Mentimeter-ish”
+                        # fallback cuối: None (PIL load mặc định)
+                        return None
+
+                    font_path = pick_font()
+
+                    # 3) Palette kiểu Mentimeter (tươi + sạch)
                     menti_palette = [
                         "#00BFA5",  # teal
                         "#2E7DFF",  # blue
@@ -580,39 +598,139 @@ def render_activity():
                         "#FF6D00",  # orange
                     ]
 
-                    def menti_color_func(word, font_size, position, orientation, random_state=None, **kwargs):
-                        # chọn màu theo hash để ổn định (không nhảy màu mỗi lần rerun)
+                    # 4) Hàm map frequency -> font size (đúng tinh thần Mentimeter)
+                    #    - dùng sqrt/log để tần suất nổi bật rõ nhưng không "nổ" quá
+                    def size_map(count, c_min, c_max, s_min=22, s_max=140):
+                        if c_max == c_min:
+                            return int((s_min + s_max) / 2)
+                        # sqrt scaling: nổi bật tốt hơn tuyến tính, ổn định hơn log khi dữ liệu ít
+                        x = (math.sqrt(count) - math.sqrt(c_min)) / (math.sqrt(c_max) - math.sqrt(c_min))
+                        return int(s_min + x * (s_max - s_min))
+
+                    # 5) Tự layout (không dùng WordCloud.fit_words) để:
+                    #    - cùng tần suất => cùng size
+                    #    - tránh chuyện "1 người nhập nhưng chữ to nhỏ khác nhau" do thuật toán fit
+                    W, H = 1200, 650
+                    img = Image.new("RGBA", (W, H), (255, 255, 255, 255))
+                    draw = ImageDraw.Draw(img)
+
+                    # sắp xếp: freq giảm dần, cùng freq ưu tiên cụm ngắn trước (dễ đặt)
+                    items = sorted(freq.items(), key=lambda x: (-x[1], len(x[0])))
+
+                    counts = [c for _, c in items]
+                    c_min, c_max = min(counts), max(counts)
+
+                    # để kiểm tra overlap bằng rectangles
+                    placed_rects = []
+
+                    # spiral placement từ tâm ra ngoài (Mentimeter-ish)
+                    center_x, center_y = W // 2, H // 2
+                    max_tries_per_word = 1400
+
+                    # deterministic để không nhảy layout mỗi rerun (Mentimeter cũng “ổn định”)
+                    rng = random.Random(42)
+
+                    def stable_color(word: str) -> str:
                         idx = abs(hash(word)) % len(menti_palette)
                         return menti_palette[idx]
 
-                    # 4) Tạo WordCloud (ưu tiên bố cục thoáng + chữ “đậm” hơn)
-                    wc = WordCloud(
-                        width=1200,
-                        height=650,
-                        background_color="white",
-                        mode="RGB",
-                        collocations=False,          # không tự ghép từ
-                        prefer_horizontal=0.96,
-                        relative_scaling=0.35,
-                        max_words=80,
-                        min_font_size=14,
-                        max_font_size=170,
-                        margin=8,
-                        random_state=42,             # cố định bố cục
-                        font_path=font_path,
-                    ).generate_from_frequencies(freq)
+                    def rects_intersect(r1, r2):
+                        return not (r1[2] <= r2[0] or r1[0] >= r2[2] or r1[3] <= r2[1] or r1[1] >= r2[3])
 
-                    wc = wc.recolor(color_func=menti_color_func, random_state=42)
+                    def can_place(rect):
+                        # trong khung + không đè lên chữ khác
+                        if rect[0] < 18 or rect[1] < 18 or rect[2] > W - 18 or rect[3] > H - 18:
+                            return False
+                        for r in placed_rects:
+                            if rects_intersect(rect, r):
+                                return False
+                        return True
 
-                    # 5) Render sắc nét như Mentimeter: xuất PNG từ PIL
-                    img = wc.to_image()
+                    for word, count in items:
+                        base_size = size_map(count, c_min, c_max, s_min=22, s_max=140)
+
+                        # nếu cụm quá dài, shrink để fit theo bề ngang (giữ logic Mentimeter: dài thì nhỏ hơn chút)
+                        # vẫn đảm bảo: tần suất cao -> base_size cao hơn rõ rệt
+                        size = base_size
+
+                        # load font
+                        def load_font(sz):
+                            if font_path:
+                                return ImageFont.truetype(font_path, sz)
+                            return ImageFont.load_default()
+
+                        font = load_font(size)
+
+                        # đo bbox
+                        bbox = draw.textbbox((0, 0), word, font=font)
+                        text_w = bbox[2] - bbox[0]
+                        text_h = bbox[3] - bbox[1]
+
+                        # shrink nếu quá rộng (để tránh “bị ép” làm méo logic)
+                        max_w = int(W * 0.86)
+                        if text_w > max_w:
+                            scale = max_w / max(1, text_w)
+                            size = max(18, int(size * scale))
+                            font = load_font(size)
+                            bbox = draw.textbbox((0, 0), word, font=font)
+                            text_w = bbox[2] - bbox[0]
+                            text_h = bbox[3] - bbox[1]
+
+                        placed = False
+                        # spiral params
+                        a = 4.2
+                        b = 4.2
+                        angle = rng.random() * 2 * math.pi
+
+                        for t in range(max_tries_per_word):
+                            # spiral radius grows
+                            r = a + b * (t / 35.0)
+                            x = int(center_x + r * math.cos(angle + t * 0.35) - text_w / 2)
+                            y = int(center_y + r * math.sin(angle + t * 0.35) - text_h / 2)
+
+                            rect = (x, y, x + text_w, y + text_h)
+                            if can_place(rect):
+                                # shadow nhẹ (Mentimeter “clean” nhưng có độ tách)
+                                shadow = (0, 0, 0, 28)
+                                draw.text((x + 2, y + 2), word, font=font, fill=shadow)
+
+                                draw.text((x, y), word, font=font, fill=stable_color(word))
+                                placed_rects.append(rect)
+                                placed = True
+                                break
+
+                        # nếu không place được, giảm nhẹ size và thử lại 1 vòng nhanh
+                        if not placed and size > 18:
+                            size2 = max(18, int(size * 0.86))
+                            font2 = load_font(size2)
+                            bbox2 = draw.textbbox((0, 0), word, font=font2)
+                            tw2 = bbox2[2] - bbox2[0]
+                            th2 = bbox2[3] - bbox2[1]
+
+                            for t in range(900):
+                                r = a + b * (t / 35.0)
+                                x = int(center_x + r * math.cos(angle + t * 0.35) - tw2 / 2)
+                                y = int(center_y + r * math.sin(angle + t * 0.35) - th2 / 2)
+                                rect = (x, y, x + tw2, y + th2)
+                                if can_place(rect):
+                                    draw.text((x + 2, y + 2), word, font=font2, fill=(0, 0, 0, 24))
+                                    draw.text((x, y), word, font=font2, fill=stable_color(word))
+                                    placed_rects.append(rect)
+                                    break
+
+                    # xuất PNG nét
+                    out = Image.new("RGB", (W, H), (255, 255, 255))
+                    out.paste(img, mask=img.split()[3])
+
                     buf = BytesIO()
-                    img.save(buf, format="PNG", optimize=True)
+                    out.save(buf, format="PNG", optimize=True)
                     st.image(buf.getvalue(), use_container_width=True)
+
+                    # hiển thị thêm thống kê nhỏ (Mentimeter có counter)
+                    st.caption(f"👥 Lượt trả lời: **{len(df)}** • 🧩 Số cụm từ duy nhất: **{len(freq)}**")
 
                 else:
                     st.info("Chưa có dữ liệu. Mời lớp nhập từ khóa.")
-
 
     # ------------------------------------------
     # 2) POLL
