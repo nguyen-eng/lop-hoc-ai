@@ -514,7 +514,7 @@ def render_activity():
     current_act_key = act
 
     # ------------------------------------------
-    # 1) WORD CLOUD (Mentimeter-like, FIX SIZE + CLEAN LAYOUT)
+    # 1) WORD CLOUD (Mentimeter-like, FIX SIZE + CLEAN LAYOUT + ANIMATE)
     # ------------------------------------------
     if act == "wordcloud":
         c1, c2 = st.columns([1, 2])
@@ -540,60 +540,54 @@ def render_activity():
         # --- CỘT PHẢI: HIỂN THỊ KẾT QUẢ ---
         with c2:
             st.markdown("##### ☁️ KẾT QUẢ")
-            df = load_data(cid, current_act_key)
 
             import re
 
             def normalize_phrase(s: str) -> str:
+                # chuẩn hoá để tránh “trùng nhưng khác kiểu gõ”
                 s = str(s or "").strip().lower()
                 s = re.sub(r"\s+", " ", s)
-                # bỏ ký tự rác ở đầu/cuối (giữ dấu tiếng Việt)
                 s = s.strip(" .,:;!?\"'`()[]{}<>|\\/+-=*#@~^_")
                 return s
 
-            def menti_palette_color_func(word, font_size, position, orientation, random_state=None, **kwargs):
+            def menti_color_func(word, font_size, position, orientation, random_state=None, **kwargs):
                 colors = ["#2563eb", "#ef4444", "#06b6d4", "#f97316", "#a855f7", "#22c55e", "#0ea5e9"]
-                # cùng 1 từ luôn cùng màu (đỡ “nhảy”)
-                return colors[hash(word) % len(colors)]
+                return colors[hash(word) % len(colors)]  # cùng từ -> cùng màu (ổn định)
+
+            df = load_data(cid, current_act_key)
 
             with st.container(border=True):
                 if df.empty:
                     st.info("Chưa có dữ liệu. Mời lớp nhập từ khóa.")
                 else:
-                    # --- ĐẾM THEO “SỐ NGƯỜI NHẬP” (unique học viên cho mỗi cụm) ---
+                    # ===== 1) ĐẾM TẦN SUẤT THEO *SỐ NGƯỜI* (unique học viên) =====
                     tmp = df[["Học viên", "Nội dung"]].dropna().copy()
                     tmp["Học viên"] = tmp["Học viên"].astype(str).str.strip()
                     tmp["phrase"] = tmp["Nội dung"].astype(str).apply(normalize_phrase)
-
                     tmp = tmp[(tmp["Học viên"] != "") & (tmp["phrase"] != "")]
-                    # nếu 1 học viên gửi lặp cùng 1 cụm → chỉ tính 1 lần
+
+                    # 1 học viên gửi lặp cùng 1 cụm -> chỉ tính 1 lần
                     tmp = tmp.drop_duplicates(subset=["Học viên", "phrase"])
 
+                    # freq = số học viên đã nhập cụm đó
                     freq_series = tmp["phrase"].value_counts()
-                    freq_dict = freq_series.to_dict()
+                    freq_dict_full = freq_series.to_dict()
 
-                    # Giới hạn số cụm để tránh rối (giống cách các công cụ trình chiếu thường làm)
-                    MAX_WORDS_SHOW = 60
-                    freq_items = sorted(freq_dict.items(), key=lambda x: x[1], reverse=True)[:MAX_WORDS_SHOW]
+                    # ===== 2) GIẢM “LỘN XỘN”: GIỚI HẠN SỐ TỪ HIỂN THỊ =====
+                    MAX_WORDS_SHOW = 60  # tăng/giảm tuỳ lớp
+                    freq_items = sorted(freq_dict_full.items(), key=lambda x: x[1], reverse=True)[:MAX_WORDS_SHOW]
                     freq_dict = dict(freq_items)
 
                     if not freq_dict:
                         st.info("Chưa có từ/cụm hợp lệ sau khi chuẩn hoá.")
                     else:
+                        # ===== 3) FIX LỖI “TẤT CẢ = 1 NHƯNG VẪN TO/NHỎ” =====
+                        # Nguyên nhân: WordCloud phải “nhét chữ”, khi thiếu chỗ nó tự hạ font cho vài chữ.
+                        # Cách xử lý: canvas lớn + scale lớn + margin lớn + giới hạn số từ
+                        # và nếu max_f == 1 thì ép min_font_size gần max_font_size để đồng cỡ.
                         max_f = max(freq_dict.values())
 
-                        # bậc size (nhìn “Mentimeter-like” hơn dạng liên tục)
-                        def freq_to_size(f: int) -> int:
-                            if max_f <= 1:
-                                return 42
-                            ratio = f / max_f
-                            if ratio >= 0.85: return 110
-                            if ratio >= 0.65: return 92
-                            if ratio >= 0.45: return 76
-                            if ratio >= 0.30: return 62
-                            if ratio >= 0.18: return 50
-                            return 40
-
+                        # font
                         font_path_use = None
                         possible_fonts = [
                             "assets/fonts/Montserrat-Bold.ttf",
@@ -606,35 +600,74 @@ def render_activity():
                                 font_path_use = f
                                 break
 
-                        # WordCloud cần dict tần suất để generate_from_frequencies :contentReference[oaicite:1]{index=1}
-                        # Trick chống “từ không lặp vẫn to nhỏ”: ép layout ổn định + canvas lớn + scale lớn + relative_scaling=0
-                        weighted_freq = {w: (freq * 1000 + freq_to_size(freq)) for w, freq in freq_dict.items()}
+                        def build_wc(sub_freq: dict):
+                            # Nếu tất cả cùng tần suất: ép đồng đều
+                            if max(sub_freq.values()) == 1:
+                                min_fs = 56
+                                max_fs = 58
+                                # giữ weight bằng nhau để không tạo chênh lệch
+                                weighted = {w: 100 for w in sub_freq.keys()}
+                            else:
+                                # bậc size (giống Slido/Mentimeter: phổ biến -> gần trung tâm & to rõ)
+                                m = max(sub_freq.values())
 
-                        wc = WordCloud(
-                            font_path=font_path_use,
-                            width=1600,
-                            height=800,
-                            background_color="white",
-                            max_words=len(weighted_freq),
-                            prefer_horizontal=1.0,
-                            relative_scaling=0.0,
-                            min_font_size=18,
-                            max_font_size=120,
-                            margin=14,
-                            collocations=False,
-                            normalize_plurals=False,
-                            random_state=42,
-                            scale=2
-                        ).generate_from_frequencies(weighted_freq)
+                                def tier(f):
+                                    r = f / m
+                                    if r >= 0.85: return 130
+                                    if r >= 0.65: return 110
+                                    if r >= 0.45: return 92
+                                    if r >= 0.30: return 76
+                                    if r >= 0.18: return 62
+                                    return 50
 
-                        wc = wc.recolor(color_func=menti_palette_color_func, random_state=42)
+                                min_fs = 24
+                                max_fs = 140
+                                # tăng trọng số để wordcloud ưu tiên placement theo độ phổ biến
+                                weighted = {w: (f * 1000 + tier(f)) for w, f in sub_freq.items()}
 
-                        fig, ax = plt.subplots(figsize=(12, 6.6))
-                        ax.imshow(wc, interpolation="bilinear")
-                        ax.axis("off")
-                        plt.tight_layout(pad=0)
-                        st.pyplot(fig)
+                            wc = WordCloud(
+                                font_path=font_path_use,
+                                width=1800,
+                                height=900,
+                                background_color="white",
+                                max_words=len(sub_freq),
+                                prefer_horizontal=1.0,
+                                relative_scaling=0.0,   # ổn định size theo rank
+                                margin=18,
+                                collocations=False,
+                                normalize_plurals=False,
+                                random_state=42,
+                                scale=2,               # nét + dễ “nhét” chữ hơn => ít phải hạ font
+                                min_font_size=min_fs,
+                                max_font_size=max_fs,
+                            ).generate_from_frequencies(weighted)
 
+                            return wc.recolor(color_func=menti_color_func, random_state=42)
+
+                        # ===== 4) HIỆU ỨNG XUẤT HIỆN TỪ TỪ (từ trung tâm lan ra) =====
+                        # (mỗi đợt thêm 1 nhóm từ theo mức phổ biến)
+                        placeholder = st.empty()
+
+                        words_sorted = sorted(freq_dict.items(), key=lambda x: x[1], reverse=True)
+                        n_words = len(words_sorted)
+
+                        # số frame vừa đủ mượt nhưng không quá nặng
+                        frames = 8
+                        step = max(1, n_words // frames)
+
+                        for k in range(step, n_words + step, step):
+                            sub = dict(words_sorted[:min(k, n_words)])
+                            wc_img = build_wc(sub)
+
+                            fig, ax = plt.subplots(figsize=(12, 6.6))
+                            ax.imshow(wc_img, interpolation="bilinear")
+                            ax.axis("off")
+                            plt.tight_layout(pad=0)
+
+                            placeholder.pyplot(fig)
+                            time.sleep(0.12)
+
+                        # ===== 5) THỐNG KÊ KIỂM CHỨNG =====
                         total_answers = len(df["Nội dung"].dropna())
                         total_unique_people = tmp["Học viên"].nunique()
                         total_unique_phrases = len(freq_series)
@@ -643,9 +676,10 @@ def render_activity():
                             f"👥 Lượt gửi: **{total_answers}** • 👤 Người tham gia (unique): **{total_unique_people}** • 🧩 Cụm duy nhất: **{total_unique_phrases}**"
                         )
 
-                        topk = pd.DataFrame(freq_items, columns=["Từ/cụm (đã chuẩn hoá)", "Số người nhập"])
+                        topk = pd.DataFrame(freq_items, columns=["Từ/cụm (chuẩn hoá)", "Số người nhập"])
                         st.dataframe(topk, use_container_width=True, hide_index=True)
-                
+
+ 
     # ------------------------------------------
     # 2) POLL
     # ------------------------------------------
