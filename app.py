@@ -12,7 +12,10 @@ from wordcloud import WordCloud
 import numpy as np
 from collections import Counter
 from io import BytesIO
-import random  # Import random ở đầu file để tránh lỗi thiếu thư viện
+import random
+import json
+import re
+import uuid
 
 # ✅ Live refresh (thay cho st.autorefresh)
 try:
@@ -25,31 +28,22 @@ _DIALOG_DECORATOR = getattr(st, "dialog", None) or getattr(st, "experimental_dia
 
 def open_wc_fullscreen_dialog(wc_html_fs: str, live: bool):
     """Mở dialog fullscreen cho wordcloud (tương thích Streamlit cũ/mới)."""
-
-    # Nếu có dialog/experimental_dialog thì dùng đúng chuẩn decorator
     if _DIALOG_DECORATOR is not None:
         @_DIALOG_DECORATOR("🖥 Fullscreen Wordcloud")
         def _inner():
-            # Live update trong fullscreen
             if live and st_autorefresh is not None:
                 st_autorefresh(interval=1500, key="wc_live_refresh_modal")
-
             st.components.v1.html(wc_html_fs, height=760, scrolling=False)
-
             if st.button("ĐÓNG FULLSCREEN", key="wc_close_full"):
                 st.session_state["wc_fullscreen"] = False
                 st.rerun()
-
         _inner()
         return
 
-    # Fallback: nếu Streamlit quá cũ không có dialog => hiển thị dạng "khung lớn"
     st.warning("Streamlit phiên bản hiện tại chưa hỗ trợ dialog/modal. Đang dùng chế độ hiển thị thay thế.")
     if live and st_autorefresh is not None:
         st_autorefresh(interval=1500, key="wc_live_refresh_modal_fallback")
-
     st.components.v1.html(wc_html_fs, height=760, scrolling=False)
-
     if st.button("ĐÓNG FULLSCREEN", key="wc_close_full"):
         st.session_state["wc_fullscreen"] = False
         st.rerun()
@@ -222,7 +216,7 @@ st.markdown(f"""
         font-size: 13px;
     }}
 
-    /* ✅ Nút fullscreen riêng (không dùng toolbar dataframe) */
+    /* ✅ toolbar wordcloud */
     .wc-toolbar {{
         display:flex;
         align-items:center;
@@ -273,23 +267,31 @@ if "page" not in st.session_state:
 if "current_act_key" not in st.session_state:
     st.session_state["current_act_key"] = "dashboard"
 
-# ✅ fullscreen state
+# fullscreen state
 if "wc_fullscreen" not in st.session_state:
     st.session_state["wc_fullscreen"] = False
 
-def get_path(cls, act):
+# -------------------------------
+# PATH HELPERS
+# -------------------------------
+def get_path(cls, act, suffix: str = ""):
+    # suffix dùng cho wordcloud theo câu hỏi (qid)
+    suffix = str(suffix or "").strip()
+    if suffix:
+        return f"data_{cls}_{act}_{suffix}.csv"
     return f"data_{cls}_{act}.csv"
 
-def save_data(cls, act, name, content):
+def save_data(cls, act, name, content, suffix: str = ""):
     content = str(content).replace("|", "-").replace("\n", " ")
+    name = str(name).replace("|", "-").replace("\n", " ")
     timestamp = datetime.now().strftime("%H:%M:%S")
     row = f"{name}|{content}|{timestamp}\n"
     with data_lock:
-        with open(get_path(cls, act), "a", encoding="utf-8") as f:
+        with open(get_path(cls, act, suffix=suffix), "a", encoding="utf-8") as f:
             f.write(row)
 
-def load_data(cls, act):
-    path = get_path(cls, act)
+def load_data(cls, act, suffix: str = ""):
+    path = get_path(cls, act, suffix=suffix)
     if os.path.exists(path):
         try:
             df = pd.read_csv(
@@ -301,7 +303,6 @@ def load_data(cls, act):
                 engine="python",
                 on_bad_lines="skip",
             )
-            # đảm bảo luôn có đủ cột
             for c in ["Học viên", "Nội dung", "Thời gian"]:
                 if c not in df.columns:
                     df[c] = ""
@@ -310,9 +311,9 @@ def load_data(cls, act):
             return pd.DataFrame(columns=["Học viên", "Nội dung", "Thời gian"])
     return pd.DataFrame(columns=["Học viên", "Nội dung", "Thời gian"])
 
-def clear_activity(cls, act):
+def clear_activity(cls, act, suffix: str = ""):
     with data_lock:
-        path = get_path(cls, act)
+        path = get_path(cls, act, suffix=suffix)
         if os.path.exists(path):
             os.remove(path)
 
@@ -321,7 +322,7 @@ def reset_to_login():
     st.rerun()
 
 # ==========================================
-# 3. CẤU HÌNH HOẠT ĐỘNG THEO LỚP (Mentimeter-like)
+# 3. CẤU HÌNH HOẠT ĐỘNG THEO LỚP
 # ==========================================
 def class_topic(cid: str) -> str:
     if cid in ["lop1", "lop2"]:
@@ -394,6 +395,77 @@ for i in range(1, 11):
         "ranking": {"name": "Ranking: Ưu tiên thao tác", "type": "Xếp hạng / Ranking", "question": "Sắp xếp thứ tự ưu tiên (quan trọng nhất lên đầu).", "items": rank_items},
         "pin": {"name": "Pin: Điểm nóng tình huống", "type": "Ghim trên ảnh / Pin", "question": pin_q, "image": MAP_IMAGE},
     }
+
+# ==========================================
+# 3.1. WORDCLOUD QUESTION BANK (MỚI)
+# ==========================================
+def wc_bank_path(cid: str) -> str:
+    return f"wc_questions_{cid}.json"
+
+def _wc_seed_default_questions(cid: str):
+    # seed 1 câu mặc định từ config hiện có
+    default_q = CLASS_ACT_CONFIG[cid]["wordcloud"]["question"]
+    now = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+    qid = "Q1"
+    bank = {
+        "active_id": qid,
+        "questions": [
+            {"id": qid, "text": default_q, "created_at": now, "updated_at": now}
+        ]
+    }
+    return bank
+
+def load_wc_bank(cid: str):
+    path = wc_bank_path(cid)
+    if os.path.exists(path):
+        try:
+            with open(path, "r", encoding="utf-8") as f:
+                bank = json.load(f)
+            if "questions" not in bank or not isinstance(bank["questions"], list):
+                bank = _wc_seed_default_questions(cid)
+            if not bank.get("questions"):
+                bank = _wc_seed_default_questions(cid)
+            # ensure active exists
+            active_id = bank.get("active_id")
+            ids = {q.get("id") for q in bank["questions"]}
+            if active_id not in ids:
+                bank["active_id"] = bank["questions"][0].get("id", "Q1")
+            return bank
+        except Exception:
+            return _wc_seed_default_questions(cid)
+    return _wc_seed_default_questions(cid)
+
+def save_wc_bank(cid: str, bank: dict):
+    try:
+        with data_lock:
+            with open(wc_bank_path(cid), "w", encoding="utf-8") as f:
+                json.dump(bank, f, ensure_ascii=False, indent=2)
+    except Exception:
+        pass
+
+def wc_get_active_question(cid: str, bank: dict):
+    aid = bank.get("active_id")
+    for q in bank.get("questions", []):
+        if q.get("id") == aid:
+            return q
+    # fallback
+    qs = bank.get("questions", [])
+    return qs[0] if qs else {"id": "Q1", "text": CLASS_ACT_CONFIG[cid]["wordcloud"]["question"]}
+
+def wc_make_new_id(bank: dict) -> str:
+    # Q{n+1} ổn định, dễ nhìn
+    qs = bank.get("questions", [])
+    nums = []
+    for q in qs:
+        m = re.match(r"^Q(\d+)$", str(q.get("id", "")).strip(), flags=re.I)
+        if m:
+            nums.append(int(m.group(1)))
+    nxt = (max(nums) + 1) if nums else 2
+    return f"Q{nxt}"
+
+def wc_count_answers(cid: str, qid: str) -> int:
+    df = load_data(cid, "wordcloud", suffix=qid)
+    return int(len(df)) if df is not None else 0
 
 # ==========================================
 # 4. MÀN HÌNH ĐĂNG NHẬP (PRO)
@@ -488,6 +560,12 @@ def render_class_home():
     topic = cfg["topic"]
     cls_txt = [k for k, v in CLASSES.items() if v == cid][0]
 
+    # wordcloud active question count
+    bank = load_wc_bank(cid)
+    aq = wc_get_active_question(cid, bank)
+    active_wc_count = wc_count_answers(cid, aq.get("id", "Q1"))
+    total_wc_questions = len(bank.get("questions", []))
+
     st.markdown("<div class='list-wrap'>", unsafe_allow_html=True)
     st.markdown(f"""
         <div class="list-header">
@@ -521,15 +599,20 @@ def render_class_home():
 
     for act_key, ksuffix in act_order:
         a = cfg[act_key]
-        df = load_data(cid, act_key)
-        count = len(df)
+        if act_key == "wordcloud":
+            count = active_wc_count
+            meta_extra = f" • Câu đang kích hoạt: <b>{aq.get('id')}</b> • Tổng câu: <b>{total_wc_questions}</b>"
+        else:
+            df = load_data(cid, act_key)
+            count = len(df)
+            meta_extra = ""
 
         colL, colR = st.columns([6, 1])
         with colL:
             st.markdown(f"""
                 <div class="act-row">
                     <p class="act-name">{a["name"]}</p>
-                    <p class="act-meta">Loại hoạt động: {a["type"]} • Số lượt trả lời: <b>{count}</b></p>
+                    <p class="act-meta">Loại hoạt động: {a["type"]} • Số lượt trả lời: <b>{count}</b>{meta_extra}</p>
                 </div>
             """, unsafe_allow_html=True)
         with colR:
@@ -550,16 +633,24 @@ def render_dashboard():
     )
     st.caption(f"Chủ đề lớp: {topic}")
 
+    bank = load_wc_bank(cid)
+    aq = wc_get_active_question(cid, bank)
+    wc_active_count = wc_count_answers(cid, aq.get("id", "Q1"))
+
     cols = st.columns(3)
     activities = ["wordcloud", "poll", "openended", "scales", "ranking", "pin"]
-    names = ["WORD CLOUD", "POLL", "OPEN ENDED", "SCALES", "RANKING", "PIN IMAGE"]
+    names = ["WORD CLOUD (ACTIVE)", "POLL", "OPEN ENDED", "SCALES", "RANKING", "PIN IMAGE"]
 
     for i, act in enumerate(activities):
-        df = load_data(cid, act)
+        if act == "wordcloud":
+            n = wc_active_count
+        else:
+            df = load_data(cid, act)
+            n = len(df)
         with cols[i % 3]:
             st.markdown(f"""
             <div class="viz-card" style="text-align:center;">
-                <h1 style="color:{PRIMARY_COLOR}; margin:0; font-size:40px;">{len(df)}</h1>
+                <h1 style="color:{PRIMARY_COLOR}; margin:0; font-size:40px;">{n}</h1>
                 <p style="color:{MUTED}; font-weight:800; text-transform:uppercase;">{names[i]}</p>
             </div>
             """, unsafe_allow_html=True)
@@ -575,9 +666,8 @@ def render_activity():
     cfg = CLASS_ACT_CONFIG[cid][act]
 
     # ---- helper query params (tương thích nhiều phiên bản Streamlit) ----
-    def _get_qp(key: str, default="0"):
+    def _get_qp(key: str, default=""):
         try:
-            # Streamlit mới
             v = st.query_params.get(key, None)
             if v is None:
                 return default
@@ -590,7 +680,6 @@ def render_activity():
 
     def _set_qp(**kwargs):
         try:
-            # Streamlit mới
             for k, v in kwargs.items():
                 st.query_params[k] = str(v)
         except Exception:
@@ -616,11 +705,9 @@ def render_activity():
     current_act_key = act
 
     # ------------------------------------------
-    # 1) WORD CLOUD
+    # 1) WORD CLOUD (NÂNG CẤP: bank câu hỏi + lịch sử + quick view)
     # ------------------------------------------
     if act == "wordcloud":
-        import re, json
-
         def normalize_phrase(s: str) -> str:
             s = str(s or "").strip().lower()
             s = re.sub(r"\s+", " ", s)
@@ -628,11 +715,6 @@ def render_activity():
             return s
 
         def build_wordcloud_html(words_json: str, height_px: int = 520) -> str:
-            # ✅ Mentimeter-like:
-            # - render sau khi đo đúng kích thước container (không bị width=0)
-            # - khởi tạo từ tâm và nở đều (archimedean spiral, không xoay)
-            # - scale toàn khối để luôn nằm giữa + không bị lệch góc
-            # - padding lớn hơn để không “dẫm chữ”
             comp_html = f"""
 <!doctype html>
 <html>
@@ -679,7 +761,6 @@ def render_activity():
     const rng = mulberry32(42);
 
     function hashHue(str) {{
-      // djb2 hash -> hue ổn định theo chữ, đa dạng màu
       let h = 5381;
       for (let i=0;i<str.length;i++) {{
         h = ((h << 5) + h) + str.charCodeAt(i);
@@ -693,9 +774,8 @@ def render_activity():
       const vmin = Math.max(1, d3.min(vals));
       const vmax = Math.max(1, d3.max(vals));
       if (vmax === vmin) {{
-        return () => 58; // tất cả 1 người nhập => cùng size
+        return () => 58;
       }}
-      // sqrt scale: mượt hơn, ít “nhảy size”
       return d3.scaleSqrt()
         .domain([vmin, vmax])
         .range([26, 118])
@@ -718,7 +798,6 @@ def render_activity():
       const vals = data.map(d => d.value);
       const fontScale = getSizeScale(vals);
 
-      // sort desc để từ “mấu chốt” đặt ở tâm trước
       const words = data
         .slice()
         .sort((a,b) => d3.descending(a.value, b.value))
@@ -728,7 +807,7 @@ def render_activity():
             text: d.text,
             value: d.value,
             size: Math.round(fontScale(d.value)),
-            rotate: 0,             // ✅ không xoay: mentimeter gọn, ít chạm
+            rotate: 0,
             hue: hue,
             color: `hsl(${{hue}}, 84%, 50%)`,
             __key: d.text
@@ -738,8 +817,8 @@ def render_activity():
       const layout = d3.layout.cloud()
         .size([W, H])
         .words(words)
-        .padding(14)               // ✅ tăng padding: chống dẫm chữ
-        .spiral("archimedean")     // ✅ nở đều từ tâm
+        .padding(14)
+        .spiral("archimedean")
         .rotate(d => d.rotate)
         .font("Montserrat")
         .fontSize(d => d.size)
@@ -751,7 +830,6 @@ def render_activity():
       function draw(placed) {{
         if (!placed || placed.length === 0) return;
 
-        // ---- compute bbox của toàn khối ----
         let minX = Infinity, maxX = -Infinity, minY = Infinity, maxY = -Infinity;
         placed.forEach(w => {{
           const x0 = w.x - (w.width  || 0)/2;
@@ -769,13 +847,11 @@ def render_activity():
         const cx = (minX + maxX) / 2;
         const cy = (minY + maxY) / 2;
 
-        // ---- scale để luôn “gọn” giữa màn hình, không trôi góc ----
         const margin = 0.92;
         const s = Math.min((W*margin)/bw, (H*margin)/bh);
 
         g.attr("transform", `translate(${{W/2}},${{H/2}}) scale(${{s}}) translate(${{-cx}},${{-cy}})`);
 
-        // ---- draw ----
         const sel = g.selectAll("text.word")
           .data(placed, d => d.__key);
 
@@ -789,7 +865,6 @@ def render_activity():
 
         const merged = enter.merge(sel);
 
-        // animation: vào từ tâm, nở ra đều
         merged
           .attr("transform", `translate(0,0) rotate(0)`)
           .style("fill", d => d.color)
@@ -803,7 +878,6 @@ def render_activity():
       }}
     }}
 
-    // ✅ wait until width ready (Streamlit iframe sometimes 0 at first tick)
     let tries = 0;
     function boot() {{
       tries += 1;
@@ -829,32 +903,37 @@ def render_activity():
 """
             return comp_html
 
-        # ---- lấy dữ liệu + đếm theo SỐ NGƯỜI (unique học viên) cho mỗi phrase ----
-        df = load_data(cid, current_act_key)
-
-        tmp = pd.DataFrame(columns=["Học viên", "Nội dung", "phrase"])
-        freq = {}
-        total_answers = int(df["Nội dung"].dropna().shape[0]) if ("Nội dung" in df.columns and not df.empty) else 0
-
-        try:
-            if not df.empty and ("Học viên" in df.columns) and ("Nội dung" in df.columns):
-                tmp = df[["Học viên", "Nội dung"]].copy()
-                tmp["Học viên"] = tmp["Học viên"].astype(str).str.strip()
-                tmp["phrase"] = tmp["Nội dung"].astype(str).apply(normalize_phrase)
-                tmp = tmp[(tmp["Học viên"] != "") & (tmp["phrase"] != "")]
-                # 1 người nhập 1 cụm nhiều lần vẫn tính 1
-                tmp = tmp.drop_duplicates(subset=["Học viên", "phrase"])
-                freq = tmp["phrase"].value_counts().to_dict() if "phrase" in tmp.columns else {}
-        except Exception:
+        def wc_compute_freq_for_qid(cid: str, qid: str):
+            df = load_data(cid, "wordcloud", suffix=qid)
+            tmp = pd.DataFrame(columns=["Học viên", "Nội dung", "phrase"])
             freq = {}
+            total_answers = int(df["Nội dung"].dropna().shape[0]) if ("Nội dung" in df.columns and not df.empty) else 0
+            try:
+                if not df.empty and ("Học viên" in df.columns) and ("Nội dung" in df.columns):
+                    tmp = df[["Học viên", "Nội dung"]].copy()
+                    tmp["Học viên"] = tmp["Học viên"].astype(str).str.strip()
+                    tmp["phrase"] = tmp["Nội dung"].astype(str).apply(normalize_phrase)
+                    tmp = tmp[(tmp["Học viên"] != "") & (tmp["phrase"] != "")]
+                    tmp = tmp.drop_duplicates(subset=["Học viên", "phrase"])
+                    freq = tmp["phrase"].value_counts().to_dict() if "phrase" in tmp.columns else {}
+            except Exception:
+                freq = {}
 
-        total_people = int(tmp["Học viên"].nunique()) if (not tmp.empty and "Học viên" in tmp.columns) else 0
-        total_unique_phrases = int(len(freq)) if freq else 0
+            total_people = int(tmp["Học viên"].nunique()) if (not tmp.empty and "Học viên" in tmp.columns) else 0
+            total_unique_phrases = int(len(freq)) if freq else 0
+            return freq, total_answers, total_people, total_unique_phrases
 
-        # ---- fullscreen flag (đặt TRONG wordcloud để không phá flow các activity khác) ----
+        # LOAD BANK + ACTIVE QUESTION
+        bank = load_wc_bank(cid)
+        active_q = wc_get_active_question(cid, bank)
+        active_qid = active_q.get("id", "Q1")
+        active_qtext = active_q.get("text", cfg["question"])
+
+        # query params: fullscreen + which question to view
         is_fs = (_get_qp("wcfs", "0") == "1")
+        fs_qid = _get_qp("wcq", active_qid) or active_qid
 
-        # ---- FULLSCREEN PAGE (đúng “toàn màn hình”: ẩn sidebar + block-container full width) ----
+        # ---- FULLSCREEN PAGE
         if is_fs:
             st.markdown("""
             <style>
@@ -864,22 +943,24 @@ def render_activity():
             </style>
             """, unsafe_allow_html=True)
 
-            # thanh điều khiển fullscreen
             b1, b2, b3 = st.columns([2, 6, 2])
             with b1:
                 if st.button("⬅️ Thoát Fullscreen", key="wc_exit_fs"):
                     _clear_qp()
                     st.rerun()
+            with b2:
+                st.markdown(f"**Câu hỏi ({fs_qid}):** {active_qtext if fs_qid == active_qid else ''}")
             with b3:
                 st.caption("Tỷ lệ hiển thị 16:9")
 
-            # live refresh trong fullscreen: vẫn dùng toggle từ session_state
             live_fs = bool(st.session_state.get("wc_live_toggle", True))
             if live_fs:
                 if st_autorefresh is not None:
                     st_autorefresh(interval=1500, key="wc_live_refresh_fs")
                 else:
                     st.warning("Thiếu gói streamlit-autorefresh. Thêm vào requirements.txt: streamlit-autorefresh")
+
+            freq, total_answers, total_people, total_unique_phrases = wc_compute_freq_for_qid(cid, fs_qid)
 
             if not freq:
                 st.info("Chưa có dữ liệu. Mời lớp nhập từ khóa.")
@@ -893,40 +974,41 @@ def render_activity():
                 st.components.v1.html(wc_html_fs, height=845, scrolling=False)
 
             st.caption(
-                f"👥 Lượt gửi: **{total_answers}** • 👤 Người tham gia (unique): **{total_people}** • 🧩 Cụm duy nhất: **{total_unique_phrases}**"
+                f"🧾 Câu: **{fs_qid}** • 👥 Lượt gửi: **{total_answers}** • 👤 Người tham gia (unique): **{total_people}** • 🧩 Cụm duy nhất: **{total_unique_phrases}**"
             )
+            return
 
-            return  # ✅ kết thúc render_activity tại đây, không render các activity khác phía dưới
-
-        # ---- NORMAL PAGE ----
+        # ---- NORMAL PAGE
+        # Left / Right columns
         c1, c2 = st.columns([1, 2])
 
-        # --- CỘT TRÁI: NHẬP LIỆU ---
+        # --- LEFT: student input (only active question appears)
         with c1:
-            st.info(f"Câu hỏi: **{cfg['question']}**")
+            st.info(f"Câu hỏi đang kích hoạt ({active_qid}): **{active_qtext}**")
+
             if st.session_state["role"] == "student":
                 with st.form("f_wc"):
                     n = st.text_input("Tên")
                     txt = st.text_input("Nhập 1 từ khóa / cụm từ (giữ nguyên cụm)")
                     if st.form_submit_button("GỬI"):
                         if n.strip() and txt.strip():
-                            save_data(cid, current_act_key, n, txt)
+                            save_data(cid, "wordcloud", n, txt, suffix=active_qid)
                             st.success("Đã gửi!")
                             time.sleep(0.2)
                             st.rerun()
                         else:
                             st.warning("Vui lòng nhập đủ Tên và Từ khóa.")
             else:
-                st.warning("Giảng viên xem kết quả bên phải.")
+                st.warning("Giảng viên xem kết quả bên phải + quản trị câu hỏi bên dưới.")
 
-        # --- CỘT PHẢI: HIỂN THỊ KẾT QUẢ ---
+        # --- RIGHT: results for active question
         with c2:
             tcol1, tcol2, tcol3 = st.columns([2, 2, 2])
             with tcol1:
                 live = st.toggle("🔴 Live update (1.5s)", value=True, key="wc_live_toggle")
             with tcol2:
                 if st.button("🖥 Fullscreen Wordcloud", key="wc_btn_full"):
-                    _set_qp(wcfs="1")
+                    _set_qp(wcfs="1", wcq=active_qid)
                     st.rerun()
             with tcol3:
                 show_table = st.toggle("Hiện bảng Top từ", value=False, key="wc_show_table")
@@ -937,13 +1019,14 @@ def render_activity():
                 else:
                     st.warning("Thiếu gói streamlit-autorefresh. Thêm vào requirements.txt: streamlit-autorefresh")
 
-            st.markdown("##### ☁️ KẾT QUẢ")
+            st.markdown("##### ☁️ KẾT QUẢ (CÂU ĐANG KÍCH HOẠT)")
+            freq, total_answers, total_people, total_unique_phrases = wc_compute_freq_for_qid(cid, active_qid)
 
             with st.container(border=True):
                 if not freq:
                     st.info("Chưa có dữ liệu. Mời lớp nhập từ khóa.")
+                    items = []
                 else:
-                    # ✅ giảm số từ để “đỡ lộn xộn” (mentimeter thường không nhồi quá nhiều)
                     MAX_WORDS_SHOW = 60
                     items = sorted(freq.items(), key=lambda x: x[1], reverse=True)[:MAX_WORDS_SHOW]
                     words_payload = [{"text": k, "value": int(v)} for k, v in items]
@@ -953,12 +1036,151 @@ def render_activity():
                     st.components.v1.html(wc_html, height=540, scrolling=False)
 
             st.caption(
-                f"👥 Lượt gửi: **{total_answers}** • 👤 Người tham gia (unique): **{total_people}** • 🧩 Cụm duy nhất: **{total_unique_phrases}**"
+                f"🧾 Câu: **{active_qid}** • 👥 Lượt gửi: **{total_answers}** • 👤 Người tham gia (unique): **{total_people}** • 🧩 Cụm duy nhất: **{total_unique_phrases}**"
             )
 
             if show_table and freq:
                 topk = pd.DataFrame(items[:20], columns=["Từ/cụm (chuẩn hoá)", "Số người nhập"])
                 st.dataframe(topk, use_container_width=True, hide_index=True)
+
+        # --------------------------
+        # TEACHER: Question Bank + History + Quick View
+        # --------------------------
+        if st.session_state["role"] == "teacher":
+            st.markdown("---")
+            with st.expander("🧠 WORD CLOUD • QUẢN TRỊ CÂU HỎI (Không giới hạn) + Lịch sử + Xem nhanh", expanded=True):
+                left_admin, right_admin = st.columns([2, 3])
+
+                # LEFT: create / edit / activate
+                with left_admin:
+                    st.markdown("###### ✅ Câu hỏi đang kích hoạt")
+                    st.success(f"({active_qid}) {active_qtext}")
+
+                    st.markdown("###### ➕ Thêm câu hỏi mới")
+                    with st.form("wc_add_q_form"):
+                        new_text = st.text_area("Nội dung câu hỏi mới", placeholder="Nhập câu hỏi...", height=90)
+                        make_active = st.checkbox("Kích hoạt ngay sau khi tạo", value=True)
+                        if st.form_submit_button("TẠO CÂU HỎI"):
+                            if not new_text.strip():
+                                st.warning("Vui lòng nhập nội dung câu hỏi.")
+                            else:
+                                now = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+                                new_id = wc_make_new_id(bank)
+                                bank["questions"].append({"id": new_id, "text": new_text.strip(), "created_at": now, "updated_at": now})
+                                if make_active:
+                                    bank["active_id"] = new_id
+                                save_wc_bank(cid, bank)
+                                st.toast("Đã tạo câu hỏi.")
+                                time.sleep(0.15)
+                                st.rerun()
+
+                    st.markdown("###### ✏️ Sửa nhanh câu đang kích hoạt")
+                    with st.form("wc_edit_active_form"):
+                        edit_text = st.text_area("Chỉnh nội dung", value=active_qtext, height=90)
+                        if st.form_submit_button("LƯU CHỈNH SỬA"):
+                            for q in bank["questions"]:
+                                if q.get("id") == active_qid:
+                                    q["text"] = edit_text.strip()
+                                    q["updated_at"] = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+                            save_wc_bank(cid, bank)
+                            st.toast("Đã cập nhật câu hỏi.")
+                            time.sleep(0.15)
+                            st.rerun()
+
+                    st.markdown("###### 🚀 Kích hoạt câu bất kỳ")
+                    q_labels = []
+                    q_map = {}
+                    for q in bank.get("questions", []):
+                        qid = q.get("id")
+                        txt = q.get("text", "")
+                        label = f"{qid} — {txt[:70]}{'...' if len(txt) > 70 else ''}"
+                        q_labels.append(label)
+                        q_map[label] = qid
+
+                    sel_label = st.selectbox("Chọn câu để kích hoạt", q_labels, index=max(0, q_labels.index(next((l for l in q_labels if l.startswith(active_qid + " —")), q_labels[0]))))
+                    if st.button("KÍCH HOẠT CÂU ĐÃ CHỌN", key="wc_activate_btn"):
+                        bank["active_id"] = q_map.get(sel_label, active_qid)
+                        save_wc_bank(cid, bank)
+                        st.toast("Đã kích hoạt.")
+                        time.sleep(0.15)
+                        st.rerun()
+
+                    st.markdown("###### 🗑 Xóa câu hỏi (không xóa file dữ liệu để tránh mất lịch sử)")
+                    del_label = st.selectbox("Chọn câu để xóa khỏi danh sách", q_labels, key="wc_del_select")
+                    if st.button("XÓA KHỎI DANH SÁCH", key="wc_del_btn"):
+                        del_id = q_map.get(del_label)
+                        if del_id == active_qid and len(bank.get("questions", [])) == 1:
+                            st.warning("Không thể xóa: phải còn ít nhất 1 câu hỏi.")
+                        else:
+                            bank["questions"] = [q for q in bank["questions"] if q.get("id") != del_id]
+                            # nếu xóa câu active thì chuyển active sang câu đầu
+                            if bank.get("active_id") == del_id:
+                                bank["active_id"] = bank["questions"][0].get("id", "Q1")
+                            save_wc_bank(cid, bank)
+                            st.toast("Đã xóa khỏi danh sách (dữ liệu vẫn còn trong file).")
+                            time.sleep(0.15)
+                            st.rerun()
+
+                # RIGHT: history + quick view per question
+                with right_admin:
+                    st.markdown("###### 🧾 Lịch sử câu hỏi + nút xem nhanh kết quả từng câu")
+                    st.caption("Mỗi câu có file dữ liệu riêng. Bạn có thể xem nhanh và (nếu muốn) kích hoạt lại.")
+
+                    # build a compact table
+                    rows = []
+                    for q in bank.get("questions", []):
+                        qid = q.get("id", "")
+                        rows.append({
+                            "Câu": qid,
+                            "Trạng thái": "ĐANG KÍCH HOẠT" if qid == active_qid else "",
+                            "Lượt gửi": wc_count_answers(cid, qid),
+                            "Cập nhật": q.get("updated_at", q.get("created_at", "")),
+                            "Nội dung": q.get("text", "")
+                        })
+                    hist_df = pd.DataFrame(rows).sort_values(by=["Câu"], ascending=True) if rows else pd.DataFrame(columns=["Câu","Trạng thái","Lượt gửi","Cập nhật","Nội dung"])
+                    st.dataframe(hist_df[["Câu", "Trạng thái", "Lượt gửi", "Cập nhật", "Nội dung"]], use_container_width=True, hide_index=True)
+
+                    st.markdown("###### 🔎 Xem nhanh (Quick View)")
+                    qid_quick = st.selectbox("Chọn câu để xem nhanh", [r["Câu"] for r in rows] if rows else [active_qid], key="wc_quick_select")
+                    q_obj = next((q for q in bank.get("questions", []) if q.get("id") == qid_quick), None)
+                    q_text_quick = (q_obj.get("text") if q_obj else active_qtext) or ""
+
+                    btn_row1, btn_row2, btn_row3 = st.columns([2, 2, 2])
+                    with btn_row1:
+                        if st.button("🖥 Fullscreen câu này", key="wc_quick_fs"):
+                            _set_qp(wcfs="1", wcq=qid_quick)
+                            st.rerun()
+                    with btn_row2:
+                        if st.button("🚀 Kích hoạt câu này", key="wc_quick_activate"):
+                            bank["active_id"] = qid_quick
+                            save_wc_bank(cid, bank)
+                            st.toast("Đã kích hoạt câu được chọn.")
+                            time.sleep(0.15)
+                            st.rerun()
+                    with btn_row3:
+                        quick_table = st.toggle("Bảng Top (câu này)", value=False, key="wc_quick_table_toggle")
+
+                    st.info(f"**({qid_quick})** {q_text_quick}")
+
+                    freq_q, total_ans_q, total_people_q, total_unique_q = wc_compute_freq_for_qid(cid, qid_quick)
+                    with st.container(border=True):
+                        if not freq_q:
+                            st.warning("Câu này chưa có dữ liệu.")
+                            items_q = []
+                        else:
+                            MAX_WORDS_SHOW_Q = 60
+                            items_q = sorted(freq_q.items(), key=lambda x: x[1], reverse=True)[:MAX_WORDS_SHOW_Q]
+                            words_payload_q = [{"text": k, "value": int(v)} for k, v in items_q]
+                            words_json_q = json.dumps(words_payload_q, ensure_ascii=False)
+                            wc_html_q = build_wordcloud_html(words_json_q, height_px=420)
+                            st.components.v1.html(wc_html_q, height=440, scrolling=False)
+
+                    st.caption(
+                        f"👥 Lượt gửi: **{total_ans_q}** • 👤 Người tham gia (unique): **{total_people_q}** • 🧩 Cụm duy nhất: **{total_unique_q}**"
+                    )
+                    if quick_table and freq_q:
+                        topk_q = pd.DataFrame(items_q[:20], columns=["Từ/cụm (chuẩn hoá)", "Số người nhập"])
+                        st.dataframe(topk_q, use_container_width=True, hide_index=True)
 
     # ------------------------------------------
     # 2) POLL
@@ -1181,7 +1403,16 @@ def render_activity():
                 st.markdown("###### 🤖 AI Trợ giảng")
                 prompt = st.text_input("Nhập lệnh cho AI", placeholder="Ví dụ: Hãy rút ra 3 xu hướng chính và 2 gợi ý giảng dạy.")
                 if st.button("PHÂN TÍCH NGAY", key="btn_ai"):
-                    curr_df = load_data(cid, current_act_key)
+                    # Wordcloud: phân tích câu active (đúng logic)
+                    if current_act_key == "wordcloud":
+                        bank = load_wc_bank(cid)
+                        aq = wc_get_active_question(cid, bank)
+                        curr_df = load_data(cid, "wordcloud", suffix=aq.get("id", "Q1"))
+                        act_name = f"{cfg['name']} ({aq.get('id')})"
+                    else:
+                        curr_df = load_data(cid, current_act_key)
+                        act_name = cfg["name"]
+
                     if curr_df.empty:
                         st.warning("Chưa có dữ liệu để phân tích.")
                     elif model is None:
@@ -1191,7 +1422,7 @@ def render_activity():
                     else:
                         with st.spinner("AI đang phân tích..."):
                             payload = f"""
-Bạn là trợ giảng cho giảng viên. Đây là dữ liệu hoạt động ({cfg['name']}) của {cid}.
+Bạn là trợ giảng cho giảng viên. Đây là dữ liệu hoạt động ({act_name}) của {cid}.
 Chủ đề lớp: {CLASS_ACT_CONFIG[cid]['topic']}
 
 DỮ LIỆU (dạng bảng):
@@ -1212,7 +1443,12 @@ Hãy trả lời theo cấu trúc:
             with col_reset:
                 st.markdown("###### 🗑 Xóa dữ liệu")
                 if st.button("RESET HOẠT ĐỘNG", key="btn_reset"):
-                    clear_activity(cid, current_act_key)
+                    if current_act_key == "wordcloud":
+                        bank = load_wc_bank(cid)
+                        aq = wc_get_active_question(cid, bank)
+                        clear_activity(cid, "wordcloud", suffix=aq.get("id", "Q1"))
+                    else:
+                        clear_activity(cid, current_act_key)
                     st.toast("Đã xóa dữ liệu hoạt động")
                     time.sleep(0.4)
                     st.rerun()
