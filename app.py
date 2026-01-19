@@ -376,7 +376,9 @@ for i in range(9, 11):
 # ---- SESSION STATE ----
 if "logged_in" not in st.session_state:
     st.session_state.update({"logged_in": False, "role": "", "class_id": ""})
-
+# device_id: định danh máy/trình duyệt (mỗi máy 1 lần vote)
+if "device_id" not in st.session_state:
+    st.session_state["device_id"] = str(uuid.uuid4())
 # page routing: login | class_home | activity | dashboard
 if "page" not in st.session_state:
     st.session_state["page"] = "login"
@@ -435,7 +437,44 @@ def clear_activity(cls, act, suffix: str = ""):
         path = get_path(cls, act, suffix=suffix)
         if os.path.exists(path):
             os.remove(path)
+# =========================
+# POLL: 1 DEVICE = 1 VOTE
+# =========================
+def poll_vote_lock_path(cid: str) -> str:
+    # lưu danh sách device_id đã vote theo lớp
+    return f"poll_votelock_{cid}.txt"
 
+def poll_has_voted(cid: str, device_id: str) -> bool:
+    if not device_id:
+        return False
+    path = poll_vote_lock_path(cid)
+    if not os.path.exists(path):
+        return False
+    try:
+        with data_lock:
+            with open(path, "r", encoding="utf-8") as f:
+                voted = {line.strip() for line in f if line.strip()}
+        return device_id.strip() in voted
+    except Exception:
+        return False
+
+def poll_mark_voted(cid: str, device_id: str):
+    if not device_id:
+        return
+    path = poll_vote_lock_path(cid)
+    try:
+        with data_lock:
+            # tránh ghi trùng
+            existing = set()
+            if os.path.exists(path):
+                with open(path, "r", encoding="utf-8") as f:
+                    existing = {line.strip() for line in f if line.strip()}
+            if device_id.strip() in existing:
+                return
+            with open(path, "a", encoding="utf-8") as f:
+                f.write(device_id.strip() + "\n")
+    except Exception:
+        pass
 def reset_to_login():
     st.session_state.clear()
     st.rerun()
@@ -1309,20 +1348,32 @@ def render_activity():
         options = cfg["options"]
         with c1:
             st.info(f"Câu hỏi: **{cfg['question']}**")
+
+            device_id = st.session_state.get("device_id", "")
+            already_voted = poll_has_voted(cid, device_id)
+
             if st.session_state["role"] == "student":
-                with st.form("f_poll"):
-                    n = st.text_input("Tên")
-                    vote = st.radio("Lựa chọn", options)
-                    if st.form_submit_button("BÌNH CHỌN"):
-                        if n.strip():
-                            save_data(cid, current_act_key, n, vote)
-                            st.success("Đã chọn!")
-                            time.sleep(0.2)
-                            st.rerun()
-                        else:
-                            st.warning("Vui lòng nhập Tên.")
+                if already_voted:
+                    st.error("Máy này đã bình chọn rồi. Mỗi máy tính chỉ được bình chọn 1 lần.")
+                else:
+                    with st.form("f_poll"):
+                        n = st.text_input("Tên")
+                        vote = st.radio("Lựa chọn", options)
+
+                        if st.form_submit_button("BÌNH CHỌN"):
+                            if not n.strip():
+                                st.warning("Vui lòng nhập Tên.")
+                            else:
+                                # khóa ngay lập tức để tránh double-click/rerun
+                                poll_mark_voted(cid, device_id)
+                                save_data(cid, current_act_key, n, vote)
+                                st.success("Đã chọn!")
+                                time.sleep(0.2)
+                                st.rerun()
             else:
                 st.caption(f"Đáp án gợi ý (chỉ GV): **{cfg.get('correct','')}**")
+                st.caption(f"Thiết bị (debug): {device_id[:8]}…")
+
         with c2:
             st.markdown("##### 📊 THỐNG KÊ")
             df = load_data(cid, current_act_key)
@@ -1606,6 +1657,15 @@ Hãy trả lời theo cấu trúc:
                         clear_activity(cid, "wordcloud", suffix=aq.get("id", "Q1"))
                     else:
                         clear_activity(cid, current_act_key)
+                        # nếu reset Poll thì reset luôn vote-lock để lớp vote lại được
+                        if current_act_key == "poll":
+                            try:
+                                with data_lock:
+                                    p = poll_vote_lock_path(cid)
+                                    if os.path.exists(p):
+                                        os.remove(p)
+                            except Exception:
+                                pass
                     st.toast("Đã xóa dữ liệu hoạt động")
                     time.sleep(0.4)
                     st.rerun()
