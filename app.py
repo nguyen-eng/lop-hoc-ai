@@ -64,6 +64,69 @@ def open_poll_fullscreen_dialog(fig):
     if st.button("ĐÓNG FULLSCREEN", key="poll_close_full_fallback"):
         st.session_state["poll_fullscreen"] = False
         st.rerun()
+def open_openended_fullscreen_dialog(title: str, df_wall: pd.DataFrame, model, analysis_prompt_default: str):
+    """Fullscreen cho bức tường Open Ended, kèm nút AI phân tích (tương thích Streamlit cũ/mới)."""
+    def _render_wall():
+        st.markdown(f"### 💬 {title}")
+        if df_wall is None or df_wall.empty:
+            st.info("Chưa có câu trả lời.")
+        else:
+            with st.container(border=True, height=760):
+                for _, r in df_wall.iterrows():
+                    st.markdown(
+                        f'<div class="note-card"><b>{r["Học viên"]}</b>: {r["Nội dung"]}</div>',
+                        unsafe_allow_html=True
+                    )
+
+        st.markdown("---")
+        st.markdown("#### 🤖 AI phân tích (toàn bộ ý kiến của câu này)")
+        user_prompt = st.text_input("Yêu cầu phân tích", value=analysis_prompt_default, key="oe_fs_ai_prompt")
+        if st.button("PHÂN TÍCH NGAY", key="oe_fs_ai_btn"):
+            if df_wall is None or df_wall.empty:
+                st.warning("Chưa có dữ liệu để phân tích.")
+            elif model is None:
+                st.warning("Chưa cấu hình GEMINI_API_KEY trong st.secrets.")
+            elif not str(user_prompt).strip():
+                st.warning("Vui lòng nhập yêu cầu phân tích.")
+            else:
+                with st.spinner("AI đang phân tích..."):
+                    payload = f"""
+Bạn là trợ giảng cho giảng viên. Đây là toàn bộ ý kiến học viên của hoạt động Open Ended.
+
+TIÊU ĐỀ / CÂU HỎI:
+{title}
+
+DỮ LIỆU (bảng):
+{df_wall.to_string(index=False)}
+
+YÊU CẦU PHÂN TÍCH:
+{user_prompt}
+
+Hãy trả lời theo cấu trúc:
+1) Tóm tắt chủ đề nổi bật (3–5 ý)
+2) Phân loại lập luận (đúng/thiếu/nhầm, hoặc các nhóm quan điểm)
+3) Trích dẫn minh họa (trích ngắn, nêu tên học viên)
+4) Gợi ý can thiệp sư phạm (3 gợi ý)
+5) 3 câu hỏi gợi mở để thảo luận tiếp
+"""
+                    res = model.generate_content(payload)
+                    st.info(res.text)
+
+    if _DIALOG_DECORATOR is not None:
+        @_DIALOG_DECORATOR("🖥 Fullscreen Open Ended")
+        def _inner():
+            _render_wall()
+            if st.button("ĐÓNG FULLSCREEN", key="oe_close_full"):
+                st.session_state["oe_fullscreen"] = False
+                st.rerun()
+        _inner()
+        return
+
+    st.warning("Streamlit phiên bản hiện tại chưa hỗ trợ dialog/modal. Đang dùng chế độ hiển thị thay thế.")
+    _render_wall()
+    if st.button("ĐÓNG FULLSCREEN", key="oe_close_full_fallback"):
+        st.session_state["oe_fullscreen"] = False
+        st.rerun()
 # ==========================================
 # 1. CẤU HÌNH & GIAO DIỆN (UI/UX)
 # ==========================================
@@ -392,6 +455,8 @@ if "wc_fullscreen" not in st.session_state:
     st.session_state["wc_fullscreen"] = False
 if "poll_fullscreen" not in st.session_state:
     st.session_state["poll_fullscreen"] = False
+if "oe_fullscreen" not in st.session_state:
+    st.session_state["oe_fullscreen"] = False
 # -------------------------------
 # PATH HELPERS
 # -------------------------------
@@ -624,7 +689,70 @@ def wc_make_new_id(bank: dict) -> str:
 def wc_count_answers(cid: str, qid: str) -> int:
     df = load_data(cid, "wordcloud", suffix=qid)
     return int(len(df)) if df is not None else 0
+# ==========================================
+# 3.2. OPEN ENDED QUESTION BANK (MỚI)
+# ==========================================
+def oe_bank_path(cid: str) -> str:
+    return f"oe_questions_{cid}.json"
 
+def _oe_seed_default_questions(cid: str):
+    default_q = CLASS_ACT_CONFIG[cid]["openended"]["question"]
+    now = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+    qid = "Q1"
+    bank = {
+        "active_id": qid,
+        "questions": [
+            {"id": qid, "text": default_q, "created_at": now, "updated_at": now}
+        ]
+    }
+    return bank
+
+def load_oe_bank(cid: str):
+    path = oe_bank_path(cid)
+    if os.path.exists(path):
+        try:
+            with open(path, "r", encoding="utf-8") as f:
+                bank = json.load(f)
+            if "questions" not in bank or not isinstance(bank["questions"], list) or not bank["questions"]:
+                bank = _oe_seed_default_questions(cid)
+            active_id = bank.get("active_id")
+            ids = {q.get("id") for q in bank["questions"]}
+            if active_id not in ids:
+                bank["active_id"] = bank["questions"][0].get("id", "Q1")
+            return bank
+        except Exception:
+            return _oe_seed_default_questions(cid)
+    return _oe_seed_default_questions(cid)
+
+def save_oe_bank(cid: str, bank: dict):
+    try:
+        with data_lock:
+            with open(oe_bank_path(cid), "w", encoding="utf-8") as f:
+                json.dump(bank, f, ensure_ascii=False, indent=2)
+    except Exception:
+        pass
+
+def oe_get_active_question(cid: str, bank: dict):
+    aid = bank.get("active_id")
+    for q in bank.get("questions", []):
+        if q.get("id") == aid:
+            return q
+    qs = bank.get("questions", [])
+    return qs[0] if qs else {"id": "Q1", "text": CLASS_ACT_CONFIG[cid]["openended"]["question"]}
+
+def oe_make_new_id(bank: dict) -> str:
+    qs = bank.get("questions", [])
+    nums = []
+    for q in qs:
+        m = re.match(r"^Q(\d+)$", str(q.get("id", "")).strip(), flags=re.I)
+        if m:
+            nums.append(int(m.group(1)))
+    nxt = (max(nums) + 1) if nums else 2
+    return f"Q{nxt}"
+
+def oe_count_answers(cid: str, qid: str) -> int:
+    df = load_data(cid, "openended", suffix=qid)
+    return int(len(df)) if df is not None else 0
 # ==========================================
 # 4. MÀN HÌNH ĐĂNG NHẬP (PRO)
 # ==========================================
@@ -1428,27 +1556,76 @@ def render_activity():
     # 3) OPEN ENDED
     # ------------------------------------------
     elif act == "openended":
+        # ---- Open Ended Question Bank ----
+        bank = load_oe_bank(cid)
+        active_q = oe_get_active_question(cid, bank)
+        active_qid = active_q.get("id", "Q1")
+        active_qtext = active_q.get("text", cfg["question"])
+
+        # dữ liệu theo từng câu hỏi
+        df_active = load_data(cid, "openended", suffix=active_qid)
+
         c1, c2 = st.columns([1, 2])
+
+        # -------------------------
+        # LEFT: student submit (active question only)
+        # -------------------------
         with c1:
-            st.info(f"**{cfg['question']}**")
+            st.info(f"Câu hỏi đang kích hoạt ({active_qid}): **{active_qtext}**")
+
             if st.session_state["role"] == "student":
                 with st.form("f_open"):
                     n = st.text_input("Tên")
                     c = st.text_area("Câu trả lời")
                     if st.form_submit_button("GỬI"):
                         if n.strip() and c.strip():
-                            save_data(cid, current_act_key, n, c)
+                            # ✅ lưu theo suffix = qid để tách file theo câu
+                            save_data(cid, "openended", n, c, suffix=active_qid)
                             st.success("Đã gửi!")
                             time.sleep(0.2)
                             st.rerun()
                         else:
                             st.warning("Vui lòng nhập đủ Tên và nội dung.")
+            else:
+                st.warning("Giảng viên xem bức tường bên phải + quản trị câu hỏi bên dưới.")
+
+        # -------------------------
+        # RIGHT: wall + fullscreen + AI per question
+        # -------------------------
         with c2:
-            st.markdown("##### 💬 BỨC TƯỜNG Ý KIẾN")
-            df = load_data(cid, current_act_key)
+            st.markdown("##### 💬 BỨC TƯỜNG Ý KIẾN (CÂU ĐANG KÍCH HOẠT)")
+
+            topb1, topb2, topb3 = st.columns([2, 2, 2])
+            with topb1:
+                live = st.toggle("🔴 Live update (1.5s)", value=True, key="oe_live_toggle")
+            with topb2:
+                if st.session_state["role"] == "teacher":
+                    if st.button("🖥 FULLSCREEN BỨC TƯỜNG", key="oe_btn_full"):
+                        st.session_state["oe_fullscreen"] = True
+                        st.rerun()
+            with topb3:
+                show_ai = (st.session_state["role"] == "teacher") and st.toggle("Hiện AI phân tích", value=True, key="oe_show_ai_toggle")
+
+            if live:
+                if st_autorefresh is not None:
+                    st_autorefresh(interval=1500, key="oe_live_refresh")
+                else:
+                    st.warning("Thiếu gói streamlit-autorefresh. Thêm vào requirements.txt: streamlit-autorefresh")
+
+            # Fullscreen (GV)
+            if st.session_state.get("oe_fullscreen", False) and st.session_state["role"] == "teacher":
+                default_prompt = "Hãy rút ra 3 xu hướng lập luận chính, chỉ ra 3 lỗi/nhầm phổ biến, và đề xuất 3 câu hỏi gợi mở để thảo luận tiếp."
+                open_openended_fullscreen_dialog(
+                    title=f"Open Ended ({active_qid}): {active_qtext}",
+                    df_wall=df_active,
+                    model=model,
+                    analysis_prompt_default=default_prompt
+                )
+
+            # Wall normal
             with st.container(border=True, height=520):
-                if not df.empty:
-                    for _, r in df.iterrows():
+                if df_active is not None and not df_active.empty:
+                    for _, r in df_active.iterrows():
                         st.markdown(
                             f'<div class="note-card"><b>{r["Học viên"]}</b>: {r["Nội dung"]}</div>',
                             unsafe_allow_html=True
@@ -1456,6 +1633,216 @@ def render_activity():
                 else:
                     st.info("Chưa có câu trả lời.")
 
+            # AI analysis (GV) for active question
+            if show_ai:
+                st.markdown("---")
+                st.markdown("###### 🤖 AI phân tích (riêng câu đang kích hoạt)")
+                default_prompt = "Hãy phân loại ý kiến theo nhóm quan điểm, nêu điểm mạnh/yếu, trích 3 ví dụ tiêu biểu, và đề xuất 3 can thiệp sư phạm."
+                oe_prompt = st.text_input("Yêu cầu phân tích", value=default_prompt, key="oe_ai_prompt_active")
+                if st.button("PHÂN TÍCH NGAY", key="oe_ai_btn_active"):
+                    if df_active is None or df_active.empty:
+                        st.warning("Chưa có dữ liệu để phân tích.")
+                    elif model is None:
+                        st.warning("Chưa cấu hình GEMINI_API_KEY trong st.secrets.")
+                    elif not oe_prompt.strip():
+                        st.warning("Vui lòng nhập yêu cầu phân tích.")
+                    else:
+                        with st.spinner("AI đang phân tích..."):
+                            payload = f"""
+Bạn là trợ giảng cho giảng viên. Đây là dữ liệu Open Ended (theo từng câu hỏi) của {cid}.
+Chủ đề lớp: {CLASS_ACT_CONFIG[cid]['topic']}
+
+CÂU HỎI ({active_qid}):
+{active_qtext}
+
+DỮ LIỆU (bảng):
+{df_active.to_string(index=False)}
+
+YÊU CẦU CỦA GIẢNG VIÊN:
+{oe_prompt}
+
+Hãy trả lời theo cấu trúc:
+1) Tóm tắt chủ đề nổi bật
+2) Phân loại lập luận/quan điểm
+3) Trích dẫn minh họa (trích ngắn, nêu tên học viên)
+4) Gợi ý can thiệp sư phạm (3 gợi ý)
+5) 3 câu hỏi gợi mở để thảo luận tiếp
+"""
+                            res = model.generate_content(payload)
+                            st.info(res.text)
+
+        # -------------------------
+        # TEACHER: CRUD question bank + quick view per question
+        # -------------------------
+        if st.session_state["role"] == "teacher":
+            st.markdown("---")
+            with st.expander("🧠 OPEN ENDED • QUẢN TRỊ CÂU HỎI (Thêm/Sửa/Xóa) + Lịch sử + Xem nhanh", expanded=True):
+                left_admin, right_admin = st.columns([2, 3])
+
+                # LEFT: create / edit / activate / delete
+                with left_admin:
+                    st.markdown("###### ✅ Câu hỏi đang kích hoạt")
+                    st.success(f"({active_qid}) {active_qtext}")
+
+                    st.markdown("###### ➕ Thêm câu hỏi mới")
+                    with st.form("oe_add_q_form"):
+                        new_text = st.text_area("Nội dung câu hỏi mới", placeholder="Nhập câu hỏi...", height=120, key="oe_add_text")
+                        make_active = st.checkbox("Kích hoạt ngay sau khi tạo", value=True, key="oe_make_active")
+                        if st.form_submit_button("TẠO CÂU HỎI"):
+                            if not new_text.strip():
+                                st.warning("Vui lòng nhập nội dung câu hỏi.")
+                            else:
+                                now = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+                                new_id = oe_make_new_id(bank)
+                                bank["questions"].append({"id": new_id, "text": new_text.strip(), "created_at": now, "updated_at": now})
+                                if make_active:
+                                    bank["active_id"] = new_id
+                                save_oe_bank(cid, bank)
+                                st.toast("Đã tạo câu hỏi.")
+                                time.sleep(0.15)
+                                st.rerun()
+
+                    st.markdown("###### ✏️ Sửa nhanh câu đang kích hoạt")
+                    with st.form("oe_edit_active_form"):
+                        edit_text = st.text_area("Chỉnh nội dung", value=active_qtext, height=120, key="oe_edit_text")
+                        if st.form_submit_button("LƯU CHỈNH SỬA"):
+                            for q in bank["questions"]:
+                                if q.get("id") == active_qid:
+                                    q["text"] = edit_text.strip()
+                                    q["updated_at"] = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+                            save_oe_bank(cid, bank)
+                            st.toast("Đã cập nhật câu hỏi.")
+                            time.sleep(0.15)
+                            st.rerun()
+
+                    st.markdown("###### 🚀 Kích hoạt câu bất kỳ")
+                    q_labels = []
+                    q_map = {}
+                    for q in bank.get("questions", []):
+                        qid = q.get("id")
+                        txt = q.get("text", "")
+                        label = f"{qid} — {txt[:70]}{'...' if len(txt) > 70 else ''}"
+                        q_labels.append(label)
+                        q_map[label] = qid
+
+                    sel_label = st.selectbox("Chọn câu để kích hoạt", q_labels, key="oe_activate_select")
+                    if st.button("KÍCH HOẠT CÂU ĐÃ CHỌN", key="oe_activate_btn"):
+                        bank["active_id"] = q_map.get(sel_label, active_qid)
+                        save_oe_bank(cid, bank)
+                        st.toast("Đã kích hoạt.")
+                        time.sleep(0.15)
+                        st.rerun()
+
+                    st.markdown("###### 🗑 Xóa câu hỏi (không xóa file dữ liệu để giữ lịch sử)")
+                    del_label = st.selectbox("Chọn câu để xóa khỏi danh sách", q_labels, key="oe_del_select")
+                    if st.button("XÓA KHỎI DANH SÁCH", key="oe_del_btn"):
+                        del_id = q_map.get(del_label)
+                        if del_id == active_qid and len(bank.get("questions", [])) == 1:
+                            st.warning("Không thể xóa: phải còn ít nhất 1 câu hỏi.")
+                        else:
+                            bank["questions"] = [q for q in bank["questions"] if q.get("id") != del_id]
+                            if bank.get("active_id") == del_id:
+                                bank["active_id"] = bank["questions"][0].get("id", "Q1")
+                            save_oe_bank(cid, bank)
+                            st.toast("Đã xóa khỏi danh sách (dữ liệu vẫn còn trong file).")
+                            time.sleep(0.15)
+                            st.rerun()
+
+                # RIGHT: history + quick view + AI per selected question
+                with right_admin:
+                    st.markdown("###### 🧾 Lịch sử câu hỏi + xem nhanh bức tường theo từng câu")
+                    rows = []
+                    for q in bank.get("questions", []):
+                        qid = q.get("id", "")
+                        rows.append({
+                            "Câu": qid,
+                            "Trạng thái": "ĐANG KÍCH HOẠT" if qid == active_qid else "",
+                            "Lượt gửi": oe_count_answers(cid, qid),
+                            "Cập nhật": q.get("updated_at", q.get("created_at", "")),
+                            "Nội dung": q.get("text", "")
+                        })
+                    hist_df = pd.DataFrame(rows) if rows else pd.DataFrame(columns=["Câu","Trạng thái","Lượt gửi","Cập nhật","Nội dung"])
+                    if not hist_df.empty:
+                        st.dataframe(hist_df[["Câu", "Trạng thái", "Lượt gửi", "Cập nhật", "Nội dung"]], use_container_width=True, hide_index=True)
+
+                    st.markdown("###### 🔎 Xem nhanh (Quick View)")
+                    qid_quick = st.selectbox("Chọn câu để xem nhanh", [r["Câu"] for r in rows] if rows else [active_qid], key="oe_quick_select")
+                    q_obj = next((q for q in bank.get("questions", []) if q.get("id") == qid_quick), None)
+                    q_text_quick = (q_obj.get("text") if q_obj else active_qtext) or ""
+
+                    df_quick = load_data(cid, "openended", suffix=qid_quick)
+
+                    qbtn1, qbtn2, qbtn3 = st.columns([2, 2, 2])
+                    with qbtn1:
+                        if st.button("🖥 Fullscreen câu này", key="oe_quick_fs"):
+                            # dùng chung fullscreen: bật state rồi hiển thị theo active? -> ta hiển thị trực tiếp dialog quick
+                            default_prompt = "Hãy tóm tắt 3 chủ đề nổi bật, nêu 3 lỗi/thiếu phổ biến, và đề xuất 3 câu hỏi gợi mở."
+                            open_openended_fullscreen_dialog(
+                                title=f"Open Ended ({qid_quick}): {q_text_quick}",
+                                df_wall=df_quick,
+                                model=model,
+                                analysis_prompt_default=default_prompt
+                            )
+                    with qbtn2:
+                        if st.button("🚀 Kích hoạt câu này", key="oe_quick_activate"):
+                            bank["active_id"] = qid_quick
+                            save_oe_bank(cid, bank)
+                            st.toast("Đã kích hoạt câu được chọn.")
+                            time.sleep(0.15)
+                            st.rerun()
+                    with qbtn3:
+                        quick_ai = st.toggle("Hiện AI (câu này)", value=True, key="oe_quick_ai_toggle")
+
+                    st.info(f"**({qid_quick})** {q_text_quick}")
+
+                    with st.container(border=True, height=420):
+                        if df_quick is not None and not df_quick.empty:
+                            for _, r in df_quick.iterrows():
+                                st.markdown(
+                                    f'<div class="note-card"><b>{r["Học viên"]}</b>: {r["Nội dung"]}</div>',
+                                    unsafe_allow_html=True
+                                )
+                        else:
+                            st.warning("Câu này chưa có dữ liệu.")
+
+                    if quick_ai:
+                        st.markdown("###### 🤖 AI phân tích (riêng câu đang xem nhanh)")
+                        q_prompt = st.text_input(
+                            "Yêu cầu phân tích",
+                            value="Phân nhóm quan điểm, trích 3 ví dụ tiêu biểu, chỉ ra điểm thiếu/nhầm và gợi ý 3 can thiệp sư phạm.",
+                            key="oe_quick_ai_prompt"
+                        )
+                        if st.button("PHÂN TÍCH NGAY (CÂU NÀY)", key="oe_quick_ai_btn"):
+                            if df_quick is None or df_quick.empty:
+                                st.warning("Chưa có dữ liệu để phân tích.")
+                            elif model is None:
+                                st.warning("Chưa cấu hình GEMINI_API_KEY trong st.secrets.")
+                            elif not q_prompt.strip():
+                                st.warning("Vui lòng nhập yêu cầu phân tích.")
+                            else:
+                                with st.spinner("AI đang phân tích..."):
+                                    payload = f"""
+Bạn là trợ giảng cho giảng viên. Đây là dữ liệu Open Ended theo từng câu hỏi của {cid}.
+Chủ đề lớp: {CLASS_ACT_CONFIG[cid]['topic']}
+
+CÂU HỎI ({qid_quick}):
+{q_text_quick}
+
+DỮ LIỆU (bảng):
+{df_quick.to_string(index=False)}
+
+YÊU CẦU CỦA GIẢNG VIÊN:
+{q_prompt}
+
+Hãy trả lời theo cấu trúc:
+1) Tóm tắt chủ đề nổi bật
+2) Phân loại lập luận/quan điểm
+3) Trích dẫn minh họa (trích ngắn, nêu tên học viên)
+4) Gợi ý can thiệp sư phạm (3 gợi ý)
+5) 3 câu hỏi gợi mở để thảo luận tiếp
+"""
+                                    res = model.generate_content(payload)
+                                    st.info(res.text)
     # ------------------------------------------
     # 4) SCALES
     # ------------------------------------------
@@ -1656,7 +2043,13 @@ Hãy trả lời theo cấu trúc:
                         aq = wc_get_active_question(cid, bank)
                         clear_activity(cid, "wordcloud", suffix=aq.get("id", "Q1"))
                     else:
-                        clear_activity(cid, current_act_key)
+                        if current_act_key == "openended":
+                            bank = load_oe_bank(cid)
+                            aq = oe_get_active_question(cid, bank)
+                            clear_activity(cid, "openended", suffix=aq.get("id", "Q1"))
+                        else:
+                            clear_activity(cid, current_act_key)
+
                         # nếu reset Poll thì reset luôn vote-lock để lớp vote lại được
                         if current_act_key == "poll":
                             try:
