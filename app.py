@@ -104,6 +104,35 @@ def open_openended_fullscreen_dialog(title: str, df_wall: pd.DataFrame, model, a
         div[role="dialog"] span{
             font-size: 35px !important;
         }
+                /* ================================
+           FORCE FONT SIZE FOR OPEN ENDED
+           (ĐỌC XA – TRÌNH CHIẾU)
+        ================================ */
+        
+        /* Bản thân khung */
+        .note-card{
+            font-size: 34px !important;
+            line-height: 1.35 !important;
+            font-weight: 600;
+        }
+        
+        /* TẤT CẢ nội dung con bên trong */
+        .note-card *,
+        .note-card p,
+        .note-card span,
+        .note-card div,
+        .note-card li,
+        .note-card strong,
+        .note-card em{
+            font-size: 34px !important;
+            line-height: 1.35 !important;
+        }
+        
+        /* Tên học viên (đậm hơn, to hơn chút) */
+        .note-card b{
+            font-size: 36px !important;
+            font-weight: 800 !important;
+        }
         </style>
         """, unsafe_allow_html=True)
 
