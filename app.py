@@ -47,7 +47,23 @@ def open_wc_fullscreen_dialog(wc_html_fs: str, live: bool):
     if st.button("ĐÓNG FULLSCREEN", key="wc_close_full"):
         st.session_state["wc_fullscreen"] = False
         st.rerun()
+def open_poll_fullscreen_dialog(fig):
+    """Mở dialog fullscreen cho biểu đồ Poll (tương thích Streamlit cũ/mới)."""
+    if _DIALOG_DECORATOR is not None:
+        @_DIALOG_DECORATOR("🖥 Fullscreen Poll")
+        def _inner():
+            st.plotly_chart(fig, use_container_width=True)
+            if st.button("ĐÓNG FULLSCREEN", key="poll_close_full"):
+                st.session_state["poll_fullscreen"] = False
+                st.rerun()
+        _inner()
+        return
 
+    st.warning("Streamlit phiên bản hiện tại chưa hỗ trợ dialog/modal. Đang dùng chế độ hiển thị thay thế.")
+    st.plotly_chart(fig, use_container_width=True)
+    if st.button("ĐÓNG FULLSCREEN", key="poll_close_full_fallback"):
+        st.session_state["poll_fullscreen"] = False
+        st.rerun()
 # ==========================================
 # 1. CẤU HÌNH & GIAO DIỆN (UI/UX)
 # ==========================================
@@ -372,7 +388,8 @@ if "current_act_key" not in st.session_state:
 # fullscreen state
 if "wc_fullscreen" not in st.session_state:
     st.session_state["wc_fullscreen"] = False
-
+if "poll_fullscreen" not in st.session_state:
+    st.session_state["poll_fullscreen"] = False
 # -------------------------------
 # PATH HELPERS
 # -------------------------------
@@ -1309,11 +1326,49 @@ def render_activity():
         with c2:
             st.markdown("##### 📊 THỐNG KÊ")
             df = load_data(cid, current_act_key)
+
+            # Nút fullscreen chỉ dành cho giảng viên (đúng yêu cầu)
+            top_btn1, top_btn2 = st.columns([2, 3])
+            with top_btn1:
+                if st.session_state["role"] == "teacher":
+                    if st.button("🖥 FULLSCREEN BIỂU ĐỒ", key="poll_btn_fullscreen"):
+                        st.session_state["poll_fullscreen"] = True
+                        st.rerun()
+            with top_btn2:
+                st.caption("Cột cao nhất = đỏ đậm; các cột còn lại = xanh dương.")
+
             with st.container(border=True):
                 if not df.empty:
                     cnt = df["Nội dung"].value_counts().reset_index()
                     cnt.columns = ["Lựa chọn", "Số lượng"]
-                    fig = px.bar(cnt, x="Lựa chọn", y="Số lượng", text_auto=True)
+
+                    # Xác định max để tô đỏ cột cao nhất
+                    max_val = int(cnt["Số lượng"].max())
+                    cnt["Màu"] = np.where(cnt["Số lượng"] == max_val, "#8B0000", "#1D4ED8")
+
+                    # Plotly Graph Objects để set màu theo từng cột
+                    fig = go.Figure(
+                        data=[
+                            go.Bar(
+                                x=cnt["Lựa chọn"],
+                                y=cnt["Số lượng"],
+                                text=cnt["Số lượng"],
+                                textposition="auto",
+                                marker=dict(color=cnt["Màu"]),
+                            )
+                        ]
+                    )
+                    fig.update_layout(
+                        margin=dict(l=10, r=10, t=10, b=10),
+                        xaxis_title=None,
+                        yaxis_title=None,
+                    )
+
+                    # Nếu giảng viên bật fullscreen → mở dialog
+                    if st.session_state.get("poll_fullscreen", False) and st.session_state["role"] == "teacher":
+                        open_poll_fullscreen_dialog(fig)
+
+                    # Hiển thị bình thường
                     st.plotly_chart(fig, use_container_width=True)
                 else:
                     st.info("Chưa có bình chọn nào.")
