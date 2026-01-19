@@ -1606,10 +1606,8 @@ def render_activity():
         df_active = load_data(cid, "openended", suffix=active_qid)
         # ---- helper query params (đã có trong render_activity): _get_qp/_set_qp/_clear_qp ----
         is_oe_fs = (_get_qp("oefs", "0") == "1")
-    
-is_oe_fs = (_get_qp("oefs", "0") == "1")
-fs_oe_qid = _get_qp("oeq", active_qid) or active_qid
-
+        is_oe_fs = (_get_qp("oefs", "0") == "1")
+        fs_oe_qid = _get_qp("oeq", active_qid) or active_qid
         if is_oe_fs:
             # ✅ Fullscreen page 16:9 (ổn định, không dùng dialog)
             st.markdown(f"""
