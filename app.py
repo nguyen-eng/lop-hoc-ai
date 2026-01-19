@@ -1604,6 +1604,116 @@ def render_activity():
 
         # dữ liệu theo từng câu hỏi
         df_active = load_data(cid, "openended", suffix=active_qid)
+        # ---- helper query params (đã có trong render_activity): _get_qp/_set_qp/_clear_qp ----
+        is_oe_fs = (_get_qp("oefs", "0") == "1")
+    
+is_oe_fs = (_get_qp("oefs", "0") == "1")
+fs_oe_qid = _get_qp("oeq", active_qid) or active_qid
+
+        if is_oe_fs:
+            # ✅ Fullscreen page 16:9 (ổn định, không dùng dialog)
+            st.markdown(f"""
+            <style>
+              header, footer {{visibility:hidden;}}
+              [data-testid="stSidebar"] {{display:none !important;}}
+              .block-container {{
+                  max-width: 100% !important;
+                  padding: 0.4rem 0.8rem !important;
+              }}
+        
+              /* ✅ chữ ý kiến học viên >= 30 */
+              .note-card {{
+                  background: #fff;
+                  padding: 18px;
+                  border-radius: 16px;
+                  border-left: 7px solid {PRIMARY_COLOR};
+                  margin-bottom: 14px;
+                  box-shadow: 0 2px 8px rgba(0,0,0,0.08);
+                  font-size: 34px !important;   /* ✅ >=30, đọc xa tốt */
+                  line-height: 1.25 !important;
+                  font-weight: 750;
+              }}
+        
+              h1, h2, h3, p, span, div {{
+                  font-size: 34px !important;
+              }}
+            </style>
+            """, unsafe_allow_html=True)
+        
+            # Header bar
+            b1, b2, b3 = st.columns([2, 6, 2])
+            with b1:
+                if st.button("⬅️ Thoát Fullscreen", key="oe_exit_fs"):
+                    _clear_qp()
+                    st.rerun()
+            with b2:
+                st.markdown("### 💬 Fullscreen Open Ended")
+            with b3:
+                st.caption("Tối ưu trình chiếu 16:9")
+        
+            # ✅ Load đúng dữ liệu theo từng câu hỏi
+            df_fs = load_data(cid, "openended", suffix=fs_oe_qid)
+        
+            # ✅ Hiển thị đúng câu hỏi
+            q_obj_fs = next((q for q in bank.get("questions", []) if q.get("id") == fs_oe_qid), None)
+            q_text_fs = (q_obj_fs.get("text") if q_obj_fs else active_qtext) or active_qtext
+            st.markdown(f"**Câu hỏi ({fs_oe_qid}):** {q_text_fs}")
+        
+            # AI phân tích trong fullscreen (chỉ GV)
+            show_ai = False
+            if st.session_state["role"] == "teacher":
+                show_ai = st.toggle("Hiện AI phân tích", value=True, key="oe_fs_ai_toggle")
+        
+            with st.container(border=True, height=820):
+                if df_fs is not None and not df_fs.empty:
+                    for _, r in df_fs.iterrows():
+                        st.markdown(
+                            f'<div class="note-card"><b>{r["Học viên"]}</b>: {r["Nội dung"]}</div>',
+                            unsafe_allow_html=True
+                        )
+                else:
+                    st.info("Chưa có câu trả lời.")
+        
+            if show_ai and st.session_state["role"] == "teacher":
+                st.markdown("---")
+                st.markdown("### 🤖 AI phân tích (toàn bộ ý kiến – đúng câu đang xem)")
+                prompt_fs = st.text_input(
+                    "Yêu cầu phân tích",
+                    value="Hãy rút ra 3 xu hướng chính, 3 lỗi lập luận phổ biến và 3 gợi ý can thiệp sư phạm.",
+                    key="oe_fs_ai_prompt"
+                )
+                if st.button("PHÂN TÍCH NGAY", key="oe_fs_ai_btn"):
+                    if df_fs is None or df_fs.empty:
+                        st.warning("Chưa có dữ liệu để phân tích.")
+                    elif model is None:
+                        st.warning("Chưa cấu hình GEMINI_API_KEY trong st.secrets.")
+                    else:
+                        with st.spinner("AI đang phân tích..."):
+                            payload = f"""
+        Bạn là trợ giảng cho giảng viên.
+        
+        CHỦ ĐỀ LỚP:
+        {CLASS_ACT_CONFIG[cid]['topic']}
+        
+        CÂU HỎI ({fs_oe_qid}):
+        {q_text_fs}
+        
+        DỮ LIỆU (bảng):
+        {df_fs.to_string(index=False)}
+        
+        YÊU CẦU:
+        {prompt_fs}
+        
+        Trả lời ngắn gọn nhưng sâu:
+        1) 3 xu hướng nổi bật
+        2) 3 lỗi/thiếu sót lập luận phổ biến
+        3) 3 gợi ý can thiệp sư phạm ngay trên lớp
+        4) 3 câu hỏi gợi mở để thảo luận tiếp
+        """
+                            res = model.generate_content(payload)
+                            st.info(res.text)
+        
+            return
 
         c1, c2 = st.columns([1, 2])
 
@@ -1641,7 +1751,7 @@ def render_activity():
             with topb2:
                 if st.session_state["role"] == "teacher":
                     if st.button("🖥 FULLSCREEN BỨC TƯỜNG", key="oe_btn_full"):
-                        st.session_state["oe_fullscreen"] = True
+                        _set_qp(oefs="1", oeq=active_qid)  # ✅ fullscreen dạng trang + đúng câu hỏi
                         st.rerun()
             with topb3:
                 show_ai = (st.session_state["role"] == "teacher") and st.toggle("Hiện AI phân tích", value=True, key="oe_show_ai_toggle")
