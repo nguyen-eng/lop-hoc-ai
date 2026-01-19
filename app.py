@@ -67,11 +67,51 @@ def open_poll_fullscreen_dialog(fig):
 def open_openended_fullscreen_dialog(title: str, df_wall: pd.DataFrame, model, analysis_prompt_default: str):
     """Fullscreen cho bức tường Open Ended, kèm nút AI phân tích (tương thích Streamlit cũ/mới)."""
     def _render_wall():
+                # ✅ ÉP dialog Open Ended fullscreen (gần full màn hình) + font lớn để nhìn xa
+        st.markdown("""
+        <style>
+        /* 1) Ép Dialog/Modal rộng – cao gần full màn hình */
+        [data-testid="stDialog"] > div[role="dialog"],
+        div[role="dialog"]{
+            width: 95vw !important;
+            max-width: 95vw !important;
+            height: 95vh !important;
+            max-height: 95vh !important;
+        }
+
+        /* 2) Ép nội dung trong dialog dùng hết chiều cao + scroll nếu dài */
+        [data-testid="stDialog"] div[role="dialog"] > div{
+            height: 95vh !important;
+            max-height: 95vh !important;
+            overflow: auto !important;
+        }
+
+        /* 3) Tăng cỡ chữ trong fullscreen Open Ended */
+        [data-testid="stDialog"] .note-card,
+        div[role="dialog"] .note-card{
+            font-size: 35px !important;
+            line-height: 1.25 !important;
+        }
+
+        /* 4) Tăng chữ tiêu đề và các label trong dialog */
+        [data-testid="stDialog"] h3, 
+        [data-testid="stDialog"] h4,
+        [data-testid="stDialog"] p,
+        [data-testid="stDialog"] span,
+        div[role="dialog"] h3,
+        div[role="dialog"] h4,
+        div[role="dialog"] p,
+        div[role="dialog"] span{
+            font-size: 35px !important;
+        }
+        </style>
+        """, unsafe_allow_html=True)
+
         st.markdown(f"### 💬 {title}")
         if df_wall is None or df_wall.empty:
             st.info("Chưa có câu trả lời.")
         else:
-            with st.container(border=True, height=760):
+            with st.container(border=True, height=820):
                 for _, r in df_wall.iterrows():
                     st.markdown(
                         f'<div class="note-card"><b>{r["Học viên"]}</b>: {r["Nội dung"]}</div>',
