@@ -71,38 +71,134 @@ st.markdown(f"""
 <style>
     @import url('https://fonts.googleapis.com/css2?family=Montserrat:wght@400;500;600;700;800&display=swap');
 
+    /* =========================
+       GLOBAL: FULLSCREEN 16:9 + BIG FONTS (>=35)
+       ========================= */
+    html {{
+        font-size: 36px; /* ✅ toàn bộ chữ >= 35 */
+    }}
+
     html, body, [class*="css"] {{
         font-family: 'Montserrat', sans-serif;
         background-color: {BG_COLOR};
         color: {TEXT_COLOR};
+        font-size: 36px; /* ✅ áp dụng mạnh */
+        line-height: 1.25;
     }}
 
+    /* ✅ Full-width / full-screen (tối ưu trình chiếu 16:9) */
+    .block-container {{
+        max-width: 100% !important;
+        padding-top: 0.6rem !important;
+        padding-bottom: 0.6rem !important;
+        padding-left: 1.0rem !important;
+        padding-right: 1.0rem !important;
+    }}
+
+    /* Ẩn header/footer mặc định */
     header {{visibility: hidden;}} footer {{visibility: hidden;}}
 
-    /* HERO / LOGIN */
+    /* =========================
+       STREAMLIT NATIVE TEXT OVERRIDES
+       ========================= */
+    /* Labels / captions / help text */
+    label, .stMarkdown, .stText, .stCaption, p, span, div {{
+        font-size: 36px !important;
+    }}
+
+    /* Caption containers (st.caption) */
+    [data-testid="stCaptionContainer"] p {{
+        font-size: 35px !important;
+        line-height: 1.25 !important;
+    }}
+
+    /* Metric-like */
+    [data-testid="stMetricValue"] {{
+        font-size: 56px !important;
+        font-weight: 900 !important;
+    }}
+    [data-testid="stMetricLabel"] {{
+        font-size: 35px !important;
+        font-weight: 800 !important;
+    }}
+
+    /* Tabs */
+    button[data-baseweb="tab"] {{
+        font-size: 36px !important;
+        font-weight: 900 !important;
+        padding: 16px 18px !important;
+    }}
+
+    /* Inputs / Selects / Radios / Sliders */
+    .stTextInput input, .stTextArea textarea {{
+        border: 2px solid #e2e8f0; border-radius: 16px;
+        padding: 18px 18px !important;
+        font-size: 36px !important;
+        line-height: 1.25 !important;
+    }}
+
+    [data-baseweb="select"] * {{
+        font-size: 36px !important;
+    }}
+
+    [data-testid="stRadio"] * {{
+        font-size: 36px !important;
+    }}
+
+    [data-testid="stSlider"] * {{
+        font-size: 36px !important;
+    }}
+
+    /* Buttons */
+    div.stButton > button {{
+        background-color: {PRIMARY_COLOR}; color: white; border: none;
+        border-radius: 18px;
+        padding: 18px 18px !important;
+        font-weight: 900 !important;
+        letter-spacing: 0.5px;
+        width: 100%;
+        font-size: 36px !important;
+        box-shadow: 0 10px 26px rgba(0, 106, 78, 0.22);
+    }}
+    div.stButton > button:hover {{ background-color: #00503a; transform: translateY(-1px); }}
+
+    /* Expander */
+    details summary {{
+        font-size: 36px !important;
+        font-weight: 900 !important;
+    }}
+
+    /* Dataframe (tăng font) */
+    .stDataFrame, .stDataFrame * {{
+        font-size: 32px !important; /* gần 35, nhưng bảng thường dày chữ; vẫn đảm bảo dễ đọc */
+    }}
+
+    /* =========================
+       HERO / LOGIN
+       ========================= */
     .hero-wrap {{
-        max-width: 980px;
+        max-width: 100% !important;
         margin: 0 auto;
-        padding: 28px 10px 10px 10px;
+        padding: 12px 10px 10px 10px;
     }}
     .hero-card {{
         background: white;
-        border-radius: 22px;
+        border-radius: 26px;
         box-shadow: 0 18px 55px rgba(0,0,0,0.10);
         overflow: hidden;
         border: 1px solid #e2e8f0;
     }}
     .hero-top {{
         background: linear-gradient(135deg, rgba(0,106,78,0.12), rgba(0,106,78,0.03));
-        padding: 26px 26px 18px 26px;
+        padding: 28px 28px 22px 28px;
         border-bottom: 1px solid #e2e8f0;
         display:flex;
-        gap:18px;
+        gap:22px;
         align-items:center;
     }}
     .hero-badge {{
-        width: 78px; height: 78px;
-        border-radius: 18px;
+        width: 96px; height: 96px;
+        border-radius: 20px;
         background: white;
         border: 1px solid #e2e8f0;
         display:flex;
@@ -112,68 +208,67 @@ st.markdown(f"""
         flex: 0 0 auto;
     }}
     .hero-title {{
-        font-weight: 800;
+        font-weight: 900;
         color: {PRIMARY_COLOR};
-        font-size: 26px;
-        line-height: 1.2;
+        font-size: 44px; /* ✅ >=35 */
+        line-height: 1.15;
         margin: 0;
         word-break: break-word;
     }}
     .hero-sub {{
         color: {MUTED};
-        font-weight: 600;
-        margin-top: 6px;
+        font-weight: 800;
+        margin-top: 10px;
         margin-bottom: 0;
+        font-size: 36px; /* ✅ */
     }}
     .hero-body {{
-        padding: 18px 26px 22px 26px;
+        padding: 22px 28px 26px 28px;
     }}
     .hero-meta {{
         background:#f8fafc;
         border: 1px solid #e2e8f0;
-        border-radius: 14px;
-        padding: 14px 14px;
+        border-radius: 16px;
+        padding: 18px 18px;
         color:#334155;
-        font-size: 14px;
+        font-size: 36px; /* ✅ */
         margin-bottom: 12px;
     }}
 
-    /* VIZ CARD */
+    /* =========================
+       VIZ CARD
+       ========================= */
     .viz-card {{
-        background: white; padding: 25px; border-radius: 16px;
+        background: white;
+        padding: 26px;
+        border-radius: 20px;
         box-shadow: 0 4px 20px rgba(0,0,0,0.05);
-        margin-bottom: 20px; border: 1px solid #e2e8f0;
+        margin-bottom: 18px;
+        border: 1px solid #e2e8f0;
     }}
-
-    /* INPUT */
-    .stTextInput input, .stTextArea textarea {{
-        border: 2px solid #e2e8f0; border-radius: 12px; padding: 12px;
-    }}
-
-    /* BUTTONS */
-    div.stButton > button {{
-        background-color: {PRIMARY_COLOR}; color: white; border: none;
-        border-radius: 14px; padding: 12px 18px; font-weight: 800;
-        letter-spacing: 0.5px; width: 100%;
-        box-shadow: 0 6px 18px rgba(0, 106, 78, 0.22);
-    }}
-    div.stButton > button:hover {{ background-color: #00503a; transform: translateY(-1px); }}
 
     /* NOTE CARD */
     .note-card {{
-        background: #fff; padding: 15px; border-radius: 12px;
-        border-left: 5px solid {PRIMARY_COLOR}; margin-bottom: 12px;
-        box-shadow: 0 2px 8px rgba(0,0,0,0.08); font-size: 15px;
+        background: #fff;
+        padding: 18px;
+        border-radius: 16px;
+        border-left: 7px solid {PRIMARY_COLOR};
+        margin-bottom: 14px;
+        box-shadow: 0 2px 8px rgba(0,0,0,0.08);
+        font-size: 36px; /* ✅ */
+        line-height: 1.25;
     }}
 
     /* SIDEBAR */
     [data-testid="stSidebar"] {{ background-color: #111827; }}
-    [data-testid="stSidebar"] * {{ color: #ffffff; }}
+    [data-testid="stSidebar"] * {{ color: #ffffff; font-size: 34px !important; }} /* sidebar vẫn lớn */
 
-    /* CLASS HOME (Gradescope-ish list) */
+    /* =========================
+       CLASS HOME (Gradescope-ish list) - FULL WIDTH
+       ========================= */
     .list-wrap {{
         background: transparent;
-        max-width: 1080px;
+        max-width: 100% !important; /* ✅ full */
         margin: 0 auto;
     }}
     .list-header {{
@@ -184,36 +279,37 @@ st.markdown(f"""
         margin: 6px 0 12px 0;
     }}
     .list-title {{
-        font-size: 26px;
+        font-size: 44px; /* ✅ */
         font-weight: 900;
         color: #0f172a;
         margin: 0;
     }}
     .list-sub {{
-        margin: 6px 0 0 0;
+        margin: 10px 0 0 0;
         color: {MUTED};
-        font-weight: 600;
-        font-size: 14px;
+        font-weight: 800;
+        font-size: 35px; /* ✅ */
     }}
     .act-row {{
         background: white;
         border: 1px solid #e2e8f0;
-        border-radius: 16px;
-        padding: 16px 16px;
+        border-radius: 20px;
+        padding: 18px 18px;
         box-shadow: 0 10px 30px rgba(0,0,0,0.06);
-        margin-bottom: 12px;
+        margin-bottom: 14px;
     }}
     .act-name {{
         font-weight: 900;
-        font-size: 16px;
-        margin: 0 0 4px 0;
+        font-size: 38px; /* ✅ */
+        margin: 0 0 8px 0;
         color: #0f172a;
     }}
     .act-meta {{
         margin: 0;
         color: {MUTED};
-        font-weight: 600;
-        font-size: 13px;
+        font-weight: 800;
+        font-size: 35px; /* ✅ */
+        line-height: 1.25;
     }}
 
     /* ✅ toolbar wordcloud */
@@ -222,15 +318,21 @@ st.markdown(f"""
         align-items:center;
         justify-content:space-between;
         gap:10px;
-        margin: 6px 0 10px 0;
-        padding: 8px 10px;
+        margin: 10px 0 12px 0;
+        padding: 12px 12px;
         border: 1px solid #e2e8f0;
-        border-radius: 12px;
+        border-radius: 16px;
         background: #fff;
     }}
     .wc-toolbar small {{
         color: {MUTED};
-        font-weight: 700;
+        font-weight: 800;
+        font-size: 35px; /* ✅ */
+    }}
+
+    /* ✅ Plotly container: ưu tiên dùng hết chiều ngang */
+    [data-testid="stPlotlyChart"] {{
+        width: 100% !important;
     }}
 </style>
 """, unsafe_allow_html=True)
@@ -478,7 +580,7 @@ if (not st.session_state.get("logged_in", False)) or (st.session_state.get("page
         <div class="hero-card">
             <div class="hero-top">
                 <div class="hero-badge">
-                    <img src="{logo}" style="width:60px; height:60px; object-fit:contain;" />
+                    <img src="{logo}" style="width:72px; height:72px; object-fit:contain;" />
                 </div>
                 <div>
                     <p class="hero-title">TRƯỜNG ĐẠI HỌC CẢNH SÁT NHÂN DÂN</p>
@@ -524,7 +626,7 @@ if (not st.session_state.get("logged_in", False)) or (st.session_state.get("page
 # 5. SIDEBAR + NAV
 # ==========================================
 with st.sidebar:
-    st.image(LOGO_URL, width=80)
+    st.image(LOGO_URL, width=90)
     st.markdown("---")
     st.caption("🎵 NHẠC NỀN")
     st.audio("https://www.soundhelix.com/examples/mp3/SoundHelix-Song-1.mp3")
@@ -628,7 +730,7 @@ def render_dashboard():
     cid = st.session_state["class_id"]
     topic = CLASS_ACT_CONFIG[cid]["topic"]
     st.markdown(
-        f"<h2 style='color:{PRIMARY_COLOR}; border-bottom:2px solid #e2e8f0; padding-bottom:10px;'>🏠 Dashboard</h2>",
+        f"<h2 style='color:{PRIMARY_COLOR}; border-bottom:2px solid #e2e8f0; padding-bottom:10px; font-size:46px; font-weight:900;'>🏠 Dashboard</h2>",
         unsafe_allow_html=True
     )
     st.caption(f"Chủ đề lớp: {topic}")
@@ -650,8 +752,8 @@ def render_dashboard():
         with cols[i % 3]:
             st.markdown(f"""
             <div class="viz-card" style="text-align:center;">
-                <h1 style="color:{PRIMARY_COLOR}; margin:0; font-size:40px;">{n}</h1>
-                <p style="color:{MUTED}; font-weight:800; text-transform:uppercase;">{names[i]}</p>
+                <h1 style="color:{PRIMARY_COLOR}; margin:0; font-size:72px; font-weight:900;">{n}</h1>
+                <p style="color:{MUTED}; font-weight:900; text-transform:uppercase; font-size:35px;">{names[i]}</p>
             </div>
             """, unsafe_allow_html=True)
 
@@ -698,7 +800,7 @@ def render_activity():
             st.rerun()
     with topR:
         st.markdown(
-            f"<h2 style='color:{PRIMARY_COLOR}; border-bottom:2px solid #e2e8f0; padding-bottom:10px;'>{cfg['name']}</h2>",
+            f"<h2 style='color:{PRIMARY_COLOR}; border-bottom:2px solid #e2e8f0; padding-bottom:10px; font-size:46px; font-weight:900;'>{cfg['name']}</h2>",
             unsafe_allow_html=True
         )
 
@@ -1058,7 +1160,7 @@ def render_activity():
 
                     st.markdown("###### ➕ Thêm câu hỏi mới")
                     with st.form("wc_add_q_form"):
-                        new_text = st.text_area("Nội dung câu hỏi mới", placeholder="Nhập câu hỏi...", height=90)
+                        new_text = st.text_area("Nội dung câu hỏi mới", placeholder="Nhập câu hỏi...", height=120)
                         make_active = st.checkbox("Kích hoạt ngay sau khi tạo", value=True)
                         if st.form_submit_button("TẠO CÂU HỎI"):
                             if not new_text.strip():
@@ -1076,7 +1178,7 @@ def render_activity():
 
                     st.markdown("###### ✏️ Sửa nhanh câu đang kích hoạt")
                     with st.form("wc_edit_active_form"):
-                        edit_text = st.text_area("Chỉnh nội dung", value=active_qtext, height=90)
+                        edit_text = st.text_area("Chỉnh nội dung", value=active_qtext, height=120)
                         if st.form_submit_button("LƯU CHỈNH SỬA"):
                             for q in bank["questions"]:
                                 if q.get("id") == active_qid:
