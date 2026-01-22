@@ -759,6 +759,76 @@ def wc_count_answers(cid: str, qid: str) -> int:
     df = load_data(cid, "wordcloud", suffix=qid)
     return int(len(df)) if df is not None else 0
 # ==========================================
+# 3.1b. WORDCLOUD PROMPT BANK (MỚI)
+#   - lưu prompt theo từng câu hỏi (qid)
+# ==========================================
+def wc_prompt_bank_path(cid: str) -> str:
+    return f"wc_prompts_{cid}.json"
+
+def _wc_prompt_seed_default() -> dict:
+    # cấu trúc: { "<QID>": ["prompt1", "prompt2", ...], ... }
+    return {}
+
+def load_wc_prompts(cid: str) -> dict:
+    path = wc_prompt_bank_path(cid)
+    if os.path.exists(path):
+        try:
+            with open(path, "r", encoding="utf-8") as f:
+                data = json.load(f)
+            return data if isinstance(data, dict) else _wc_prompt_seed_default()
+        except Exception:
+            return _wc_prompt_seed_default()
+    return _wc_prompt_seed_default()
+
+def save_wc_prompts(cid: str, data: dict):
+    try:
+        with data_lock:
+            with open(wc_prompt_bank_path(cid), "w", encoding="utf-8") as f:
+                json.dump(data, f, ensure_ascii=False, indent=2)
+    except Exception:
+        pass
+
+def wc_get_prompts_for_qid(cid: str, qid: str) -> list:
+    bank = load_wc_prompts(cid)
+    prompts = bank.get(str(qid), [])
+    return prompts if isinstance(prompts, list) else []
+
+def wc_add_prompt(cid: str, qid: str, prompt: str):
+    prompt = str(prompt or "").strip()
+    if not prompt:
+        return
+    bank = load_wc_prompts(cid)
+    qid = str(qid)
+    bank.setdefault(qid, [])
+    # tránh trùng y hệt
+    if prompt not in bank[qid]:
+        bank[qid].append(prompt)
+    save_wc_prompts(cid, bank)
+
+def wc_delete_prompt(cid: str, qid: str, prompt: str):
+    bank = load_wc_prompts(cid)
+    qid = str(qid)
+    if qid in bank and isinstance(bank[qid], list):
+        bank[qid] = [p for p in bank[qid] if p != prompt]
+        save_wc_prompts(cid, bank)
+
+def wc_update_prompt(cid: str, qid: str, old_prompt: str, new_prompt: str):
+    new_prompt = str(new_prompt or "").strip()
+    if not new_prompt:
+        return
+    bank = load_wc_prompts(cid)
+    qid = str(qid)
+    if qid in bank and isinstance(bank[qid], list):
+        bank[qid] = [new_prompt if p == old_prompt else p for p in bank[qid]]
+        # loại trùng sau khi sửa
+        dedup = []
+        for p in bank[qid]:
+            if p not in dedup:
+                dedup.append(p)
+        bank[qid] = dedup
+        save_wc_prompts(cid, bank)
+
+# ==========================================
 # 3.2. OPEN ENDED QUESTION BANK (MỚI)
 # ==========================================
 def oe_bank_path(cid: str) -> str:
@@ -866,7 +936,7 @@ if (not st.session_state.get("logged_in", False)) or (st.session_state.get("page
     with tab_gv:
         t_pass = st.text_input("Mật khẩu Admin", type="password")
         if st.button("VÀO QUẢN TRỊ", key="btn_admin"):
-            if t_pass == "T05":
+            if t_pass == "779":
                 st.session_state.update({"logged_in": True, "role": "teacher", "class_id": "lop1", "page": "class_home"})
                 st.rerun()
             else:
@@ -1331,6 +1401,118 @@ def render_activity():
             st.caption(
                 f"🧾 Câu: **{fs_qid}** • 👥 Lượt gửi: **{total_answers}** • 👤 Người tham gia (unique): **{total_people}** • 🧩 Cụm duy nhất: **{total_unique_phrases}**"
             )
+                        # ==========================
+            # AI phân tích Wordcloud (riêng theo câu fs_qid) - chỉ GV
+            # ==========================
+            if st.session_state["role"] == "teacher":
+                st.markdown("---")
+                st.markdown("### 🤖 AI phân tích Wordcloud (riêng câu đang xem)")
+
+                # load đúng câu hỏi đang fullscreen
+                q_obj_fs = next((q for q in bank.get("questions", []) if q.get("id") == fs_qid), None)
+                q_text_fs = (q_obj_fs.get("text") if q_obj_fs else active_qtext) or ""
+
+                # Dữ liệu thô (để AI bám sát lời học viên)
+                df_wc_fs = load_data(cid, "wordcloud", suffix=fs_qid)
+
+                # Prompt gợi ý (CRUD theo từng câu)
+                prompts = wc_get_prompts_for_qid(cid, fs_qid)
+
+                # gợi ý mặc định nếu chưa có prompt nào
+                if not prompts:
+                    prompts = [
+                        "Hãy rút ra 5 từ khóa nổi bật và giải thích vì sao chúng nổi bật trong bối cảnh bài học.",
+                        "Hãy phân nhóm các cụm từ theo 3–5 chủ đề, kèm ví dụ minh họa (trích cụm từ).",
+                        "Chỉ ra 3 hiểu lầm/nhầm lẫn có thể có từ các từ khóa, và 3 can thiệp sư phạm ngay tại lớp."
+                    ]
+
+                st.markdown("#### 🧩 Prompt gợi ý (bấm để phân tích ngay)")
+                # hiển thị thành các nút bấm nhanh
+                for i, p in enumerate(prompts[:12]):  # giới hạn để UI gọn
+                    if st.button(f"▶ {p[:120]}{'...' if len(p) > 120 else ''}", key=f"wc_fs_quick_{fs_qid}_{i}"):
+                        st.session_state["wc_fs_prompt"] = p
+
+                # prompt tùy biến
+                default_prompt = st.session_state.get(
+                    "wc_fs_prompt",
+                    "Hãy tóm tắt 3 xu hướng chính, 3 điểm mạnh/yếu và 3 câu hỏi gợi mở để thảo luận tiếp."
+                )
+                user_prompt = st.text_area("Prompt phân tích (có thể sửa)", value=default_prompt, height=120, key=f"wc_fs_prompt_area_{fs_qid}")
+
+                colA, colB = st.columns([2, 2])
+                with colA:
+                    run_ai = st.button("PHÂN TÍCH NGAY", key=f"wc_fs_ai_run_{fs_qid}")
+                with colB:
+                    save_prompt_now = st.button("LƯU PROMPT NÀY VÀO GỢI Ý (câu này)", key=f"wc_fs_prompt_save_{fs_qid}")
+
+                if save_prompt_now:
+                    wc_add_prompt(cid, fs_qid, user_prompt)
+                    st.toast("Đã lưu prompt cho câu này.")
+                    time.sleep(0.15)
+                    st.rerun()
+
+                # CRUD prompt (thêm/sửa/xóa) ngay trong fullscreen
+                with st.expander("⚙️ Quản lý prompt gợi ý (câu này): thêm / sửa / xóa", expanded=False):
+                    existing = wc_get_prompts_for_qid(cid, fs_qid)
+                    if not existing:
+                        st.info("Chưa có prompt lưu riêng cho câu này.")
+                    else:
+                        pick = st.selectbox("Chọn prompt để sửa/xóa", existing, key=f"wc_fs_prompt_pick_{fs_qid}")
+                        new_text = st.text_area("Nội dung sau khi sửa", value=pick, height=120, key=f"wc_fs_prompt_edit_{fs_qid}")
+
+                        cX, cY = st.columns([1, 1])
+                        with cX:
+                            if st.button("LƯU SỬA", key=f"wc_fs_prompt_update_{fs_qid}"):
+                                wc_update_prompt(cid, fs_qid, pick, new_text)
+                                st.toast("Đã cập nhật prompt.")
+                                time.sleep(0.15)
+                                st.rerun()
+                        with cY:
+                            if st.button("XÓA PROMPT", key=f"wc_fs_prompt_delete_{fs_qid}"):
+                                wc_delete_prompt(cid, fs_qid, pick)
+                                st.toast("Đã xóa prompt.")
+                                time.sleep(0.15)
+                                st.rerun()
+
+                # chạy AI
+                if run_ai:
+                    if model is None:
+                        st.warning("Chưa cấu hình GEMINI_API_KEY trong st.secrets.")
+                    elif df_wc_fs is None or df_wc_fs.empty:
+                        st.warning("Chưa có dữ liệu để phân tích cho câu này.")
+                    else:
+                        # lấy top cụm (để AI bám vào kết quả nổi bật)
+                        freq_fs, total_answers_fs, total_people_fs, total_unique_fs = wc_compute_freq_for_qid(cid, fs_qid)
+                        top_items = sorted(freq_fs.items(), key=lambda x: x[1], reverse=True)[:25]
+
+                        with st.spinner("AI đang phân tích..."):
+                            payload = f"""
+Bạn là trợ giảng cho giảng viên. Đây là dữ liệu WORDCLOUD của lớp.
+
+CHỦ ĐỀ LỚP:
+{CLASS_ACT_CONFIG[cid]['topic']}
+
+CÂU HỎI ({fs_qid}):
+{q_text_fs}
+
+TOP 25 CỤM TỪ (chuẩn hoá) theo số người nhập:
+{top_items}
+
+DỮ LIỆU THÔ (bảng):
+{df_wc_fs.to_string(index=False)}
+
+YÊU CẦU PHÂN TÍCH:
+{user_prompt}
+
+Trả lời theo cấu trúc:
+1) 3–5 phát hiện chính (insights)
+2) Phân nhóm cụm từ theo chủ đề (kèm ví dụ)
+3) Dự đoán 2–3 hiểu lầm/nhầm lẫn có thể có + cách chỉnh ngay
+4) 3 can thiệp sư phạm (hỏi–đáp, ví dụ, mini-case)
+5) 3 câu hỏi gợi mở để kéo thảo luận đi sâu
+"""
+                            res = model.generate_content(payload)
+                            st.info(res.text)
             return
 
         # ---- NORMAL PAGE
