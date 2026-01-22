@@ -934,13 +934,21 @@ if (not st.session_state.get("logged_in", False)) or (st.session_state.get("page
                 st.error("Sai mã lớp!")
 
     with tab_gv:
-        t_pass = st.text_input("Mật khẩu Admin", type="password")
-        if st.button("VÀO QUẢN TRỊ", key="btn_admin"):
-            if t_pass == "779":
-                st.session_state.update({"logged_in": True, "role": "teacher", "class_id": "lop1", "page": "class_home"})
-                st.rerun()
-            else:
-                st.error("Sai mật khẩu.")
+    gv_class = st.selectbox("Chọn lớp để quản trị", list(CLASSES.keys()), key="gv_choose_class")
+    t_pass = st.text_input("Mật khẩu Admin", type="password")
+
+    if st.button("VÀO QUẢN TRỊ", key="btn_admin"):
+        if t_pass == "779":
+            cid = CLASSES[gv_class]
+            st.session_state.update({
+                "logged_in": True,
+                "role": "teacher",
+                "class_id": cid,
+                "page": "class_home"
+            })
+            st.rerun()
+        else:
+            st.error("Sai mật khẩu.")
 
     st.markdown("</div>", unsafe_allow_html=True)
     st.stop()
