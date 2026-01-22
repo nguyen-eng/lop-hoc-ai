@@ -936,7 +936,6 @@ if (not st.session_state.get("logged_in", False)) or (st.session_state.get("page
     with tab_gv:
         gv_class = st.selectbox("Chọn lớp để quản trị", list(CLASSES.keys()), key="gv_choose_class")
         t_pass = st.text_input("Mật khẩu Admin", type="password")
-    
         if st.button("VÀO QUẢN TRỊ", key="btn_admin"):
             if t_pass == "779":
                 cid = CLASSES[gv_class]
@@ -968,9 +967,25 @@ with st.sidebar:
 
     if st.session_state["role"] == "teacher":
         st.warning("CHUYỂN LỚP QUẢN LÝ")
-        s_cls = st.selectbox("", list(CLASSES.keys()), label_visibility="collapsed")
-        st.session_state["class_id"] = CLASSES[s_cls]
-
+    
+        # Tính index theo class_id hiện tại để không bị nhảy về Lớp 1 khi rerun
+        curr_cid = st.session_state.get("class_id", "lop1")
+        cls_keys = list(CLASSES.keys())
+        curr_label = next((k for k, v in CLASSES.items() if v == curr_cid), cls_keys[0])
+        curr_index = cls_keys.index(curr_label) if curr_label in cls_keys else 0
+    
+        s_cls = st.selectbox(
+            "Chọn lớp",
+            cls_keys,
+            index=curr_index,
+            key="teacher_class_switch"
+        )
+    
+        # Chỉ cập nhật khi thực sự khác
+        new_cid = CLASSES[s_cls]
+        if new_cid != st.session_state["class_id"]:
+            st.session_state["class_id"] = new_cid
+            st.rerun()
     st.markdown("---")
     if st.button("📚 Danh mục hoạt động", key="nav_class_home"):
         st.session_state["page"] = "class_home"
