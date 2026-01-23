@@ -891,8 +891,8 @@ def oe_make_new_id(bank: dict) -> str:
 def oe_count_answers(cid: str, qid: str) -> int:
     df = load_data(cid, "openended", suffix=qid)
     return int(len(df)) if df is not None else 0
-flex: 1; /* Chia đều tỷ lệ 1:1 cho 2 tab */
-text-align: center;
+    flex: 1; /* Chia đều tỷ lệ 1:1 cho 2 tab */
+    text-align: center;
 # ==========================================
 # 4. MÀN HÌNH ĐĂNG NHẬP (MCKINSEY PROFESSIONAL STANDARD)
 # ==========================================
