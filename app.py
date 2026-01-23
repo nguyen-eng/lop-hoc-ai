@@ -1041,8 +1041,7 @@ if (not st.session_state.get("logged_in", False)) or (st.session_state.get("page
             <div class="header-group">
                 <img src="{LOGO_URL}" class="uni-logo-img">
                 <div class="uni-info">
-                    <div class="uni-name">ĐẠI HỌC CẢNH SÁT</div>
-                    <div class="uni-name">NHÂN DÂN</div>
+                    <div class="uni-name"> TRƯỜNG ĐẠI HỌC CẢNH SÁT NHÂN DÂN </div>
                 </div>
             </div>
 
