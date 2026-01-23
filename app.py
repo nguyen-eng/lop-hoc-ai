@@ -1087,7 +1087,7 @@ if (not st.session_state.get("logged_in", False)) or (st.session_state.get("page
         # FOOTER
         st.markdown("""
         <div class="login-footer">
-            Hệ thống Tương tác Lớp học & Giảng dạy Số<br>
+            Hệ thống tương tác lớp học<br>
             Phát triển bởi Giảng viên <b>Trần Nguyễn Sĩ Nguyên</b>
         </div>
         """, unsafe_allow_html=True)
