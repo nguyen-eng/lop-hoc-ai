@@ -133,6 +133,42 @@ def open_openended_fullscreen_dialog(title: str, df_wall: pd.DataFrame, model, a
             font-size: 36px !important;
             font-weight: 800 !important;
         }
+        /* ===== FOOTER CHỐNG RỚT CHỮ (MOBILE SAFE) ===== */
+        .login-footer{
+          margin-top: 34px;
+          padding-top: 18px;
+          border-top: 1px solid #f0f0f0;
+          text-align: center;
+          color: #94a3b8;
+          font-family: 'Inter', sans-serif;
+        }
+        .login-footer .f1{
+          font-size: 12px;
+          font-weight: 700;
+          color:#64748b;
+          line-height: 1.25;
+        }
+        .login-footer .f2{
+          font-size: 12px;
+          font-weight: 600;
+          color:#94a3b8;
+          line-height: 1.25;
+        }
+        
+        @media (max-width: 600px){
+          .login-footer{
+            margin-top: 22px;
+            padding-top: 14px;
+          }
+          .login-footer .f1,
+          .login-footer .f2{
+            font-size: 11px;
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+          }
+        }
+
         </style>
         """, unsafe_allow_html=True)
 
@@ -1068,6 +1104,27 @@ if (not st.session_state.get("logged_in", False)) or (st.session_state.get("page
                 letter-spacing: 0.6px;
             }}
         }}
+        /* ===== SEGMENTED RADIO (THAY TAB – MOBILE SAFE) ===== */
+        div[role="radiogroup"]{
+          display:flex;
+          gap:10px;
+          justify-content:center;
+          margin-bottom: 18px;
+        }
+        div[role="radiogroup"] label{
+          border: 1px solid #e2e8f0 !important;
+          padding: 10px 14px !important;
+          border-radius: 999px !important;
+          background: #fff !important;
+          font-family: 'Inter', sans-serif !important;
+          font-weight: 800 !important;
+          color: #64748b !important;
+        }
+        div[role="radiogroup"] label:has(input:checked){
+          border-color: #b71c1c !important;
+          color: #b71c1c !important;
+          background: rgba(183,28,28,0.06) !important;
+        }
     </style>
     """, unsafe_allow_html=True)
 
@@ -1082,54 +1139,78 @@ if (not st.session_state.get("logged_in", False)) or (st.session_state.get("page
             <div class="uni-en">People's Police University</div>
         </div>
     """, unsafe_allow_html=True)
-
-    # FORM ĐĂNG NHẬP (giữ nguyên logic)
-    tab_sv, tab_gv = st.tabs(["CỔNG HỌC VIÊN", "CỔNG GIẢNG VIÊN"])
-
-    with tab_sv:
-        st.write("")
+    # ===== CHỌN CỔNG ĐĂNG NHẬP (MOBILE-FIRST) =====
+    portal = st.radio(
+        "Chọn cổng đăng nhập",
+        ["Học viên", "Giảng viên"],
+        horizontal=True,
+        label_visibility="collapsed",
+        key="portal_mode"
+    )
+    
+    st.write("")
+    
+    if portal == "Học viên":
         c_class = st.selectbox("Lớp học phần", list(CLASSES.keys()), key="mck_s_class")
-        c_pass = st.text_input("Mã bảo mật", type="password", placeholder="Nhập mã lớp...", key="mck_s_pass")
-
+        c_pass = st.text_input(
+            "Mã bảo mật",
+            type="password",
+            placeholder="Nhập mã lớp...",
+            key="mck_s_pass"
+        )
+    
         st.markdown(
             '<div style="margin-top:10px; font-size:13px; font-family:Inter; color:#555;">'
             '<input type="checkbox" checked style="accent-color:#b71c1c"> Ghi nhớ đăng nhập</div>',
             unsafe_allow_html=True
         )
-
+    
         if st.button("ĐĂNG NHẬP", key="mck_btn_s"):
             cid = CLASSES[c_class]
             if c_pass.strip() == PASSWORDS[cid]:
-                st.session_state.update({"logged_in": True, "role": "student", "class_id": cid, "page": "class_home"})
+                st.session_state.update({
+                    "logged_in": True,
+                    "role": "student",
+                    "class_id": cid,
+                    "page": "class_home"
+                })
                 st.rerun()
             else:
                 st.error("Mã bảo mật không chính xác.")
-
-    with tab_gv:
-        st.write("")
+    
+    else:
         gv_class = st.selectbox("Lớp quản lý", list(CLASSES.keys()), key="mck_g_class")
-        t_pass = st.text_input("Mật khẩu Giảng viên", type="password", placeholder="Nhập mật khẩu...", key="mck_g_pass")
-
+        t_pass = st.text_input(
+            "Mật khẩu Giảng viên",
+            type="password",
+            placeholder="Nhập mật khẩu...",
+            key="mck_g_pass"
+        )
+    
         st.markdown(
             '<div style="margin-top:10px; font-size:13px; font-family:Inter; color:#555;">'
             '<input type="checkbox" style="accent-color:#b71c1c"> Ghi nhớ đăng nhập</div>',
             unsafe_allow_html=True
         )
-
+    
         if st.button("TRUY CẬP QUẢN TRỊ", key="mck_btn_g"):
             if t_pass == "779":
                 cid = CLASSES[gv_class]
-                st.session_state.update({"logged_in": True, "role": "teacher", "class_id": cid, "page": "class_home"})
+                st.session_state.update({
+                    "logged_in": True,
+                    "role": "teacher",
+                    "class_id": cid,
+                    "page": "class_home"
+                })
                 st.rerun()
             else:
                 st.error("Sai mật khẩu.")
-
     st.markdown("""
         <div class="login-footer">
-            Hệ thống tương tác lớp học<br>
-            Phát triển bởi Giảng viên <b>Trần Nguyễn Sĩ Nguyên</b>
+          <div class="f1">Hệ thống tương tác lớp học</div>
+          <div class="f2">Phát triển bởi Giảng viên <b>Trần Nguyễn Sĩ Nguyên</b></div>
         </div>
-    """, unsafe_allow_html=True)
+        """, unsafe_allow_html=True)
 
     # ---- Wrapper đóng ----
     st.markdown("</div></div>", unsafe_allow_html=True)
