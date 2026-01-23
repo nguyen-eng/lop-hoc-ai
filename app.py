@@ -893,7 +893,7 @@ def oe_count_answers(cid: str, qid: str) -> int:
     df = load_data(cid, "openended", suffix=qid)
     return int(len(df)) if df is not None else 0
 # ==========================================
-# 4. MÀN HÌNH ĐĂNG NHẬP (HARVARD CLEAN & RESPONSIVE FIX)
+# 4. MÀN HÌNH ĐĂNG NHẬP (ACADEMIC STANDARD - RESPONSIVE)
 # ==========================================
 if (not st.session_state.get("logged_in", False)) or (st.session_state.get("page", "login") == "login"):
     st.session_state["page"] = "login"
@@ -901,197 +901,238 @@ if (not st.session_state.get("logged_in", False)) or (st.session_state.get("page
     # --- CẤU HÌNH CSS ---
     st.markdown(f"""
     <style>
-        @import url('https://fonts.googleapis.com/css2?family=Roboto:wght@400;500;700&family=Merriweather:wght@400;700;900&display=swap');
+        /* Import Font: Playfair Display (Tiêu đề hàn lâm) & Inter (Giao diện hiện đại) */
+        @import url('https://fonts.googleapis.com/css2?family=Playfair+Display:wght@700;900&family=Inter:wght@400;500;600&display=swap');
 
-        /* Nền trang sạch sẽ */
-        .stApp {{ background-color: #fcfcfc; }}
-        .block-container {{ padding-top: 0 !important; max-width: 100% !important; }}
+        /* RESET GIAO DIỆN STREAMLIT */
+        .stApp {{ background-color: #f4f6f9; }} /* Màu xám rất nhạt, sang hơn màu trắng chói */
+        .block-container {{ padding-top: 3rem !important; padding-bottom: 2rem !important; }}
         [data-testid="stHeader"] {{ display: none; }}
+        footer {{ visibility: hidden; }}
 
-        /* 1. CONTAINER CHÍNH CĂN GIỮA MÀN HÌNH */
-        .login-wrapper {{
+        /* CONTAINER CARD CHÍNH */
+        .login-card-container {{
+            background: #ffffff;
+            border-radius: 8px;
+            box-shadow: 0 10px 40px rgba(0,0,0,0.08); /* Bóng đổ mềm mại kiểu McKinsey */
+            padding: 0; /* Padding sẽ xử lý bên trong */
+            overflow: hidden;
+            border-top: 6px solid #b71c1c; /* Thanh đỏ nhận diện thương hiệu trên cùng */
+            max-width: 600px;
+            margin: 0 auto;
+        }}
+
+        /* HEADER: LOGO & TÊN TRƯỜNG */
+        .header-section {{
+            padding: 40px 40px 20px 40px;
+            text-align: center;
+            background: #fff;
+            border-bottom: 1px solid #eee;
+        }}
+
+        /* FLEXBOX CHO HEADER: Xử lý responsive thông minh */
+        .brand-wrapper {{
             display: flex;
             align-items: center;
             justify-content: center;
-            min-height: 100vh;
-            padding: 20px;
+            gap: 20px;
         }}
 
-        /* 2. CARD ĐĂNG NHẬP */
-        .login-card {{
-            background: #ffffff;
-            width: 100%;
-            max-width: 550px; /* Độ rộng chuẩn form Harvard */
-            padding: 40px 50px;
-            border: 1px solid #ddd;
-            border-radius: 4px; /* Bo góc nhẹ */
-            box-shadow: 0 4px 20px rgba(0,0,0,0.04);
-        }}
-
-        /* 3. HEADER: LOGO + TEXT (NGANG NHAU, KHÔNG RỚT) */
-        .header-group {{
-            display: flex;
-            align-items: center; /* Căn giữa theo trục dọc */
-            justify-content: center; /* Căn giữa khung */
-            gap: 20px; /* Khoảng cách giữa Logo và Chữ */
-            margin-bottom: 35px;
-            padding-bottom: 20px;
-            border-bottom: 1px solid #f0f0f0;
-        }}
-
-        .uni-logo-img {{
-            width: 85px;  /* Logo to hơn */
-            height: 85px;
+        .logo-img {{
+            width: 90px;
+            height: 90px;
             object-fit: contain;
-            flex-shrink: 0; /* Đảm bảo logo không bị bóp méo khi màn hình nhỏ */
+            filter: drop-shadow(0 4px 6px rgba(0,0,0,0.1));
         }}
 
-        .uni-info {{
-            display: flex;
-            flex-direction: column;
-            justify-content: center;
-            text-align: left; /* Chữ căn trái so với cụm logo */
+        .text-wrapper {{
+            text-align: left;
         }}
 
         .uni-name {{
-            font-family: 'Merriweather', serif;
-            color: #A41034; /* Đỏ Harvard */
-            font-weight: 900; /* Cực đậm */
-            font-size: 26px; /* Cỡ chữ PC */
+            font-family: 'Playfair Display', serif;
+            color: #b71c1c; /* Đỏ Cảnh sát */
+            font-size: 24px;
+            font-weight: 900;
             line-height: 1.2;
             text-transform: uppercase;
+            letter-spacing: 0.5px;
             margin: 0;
         }}
-        
+
         .uni-sub {{
-            font-family: 'Roboto', sans-serif;
-            font-size: 16px;
-            color: #555;
+            font-family: 'Inter', sans-serif;
+            color: #64748b;
+            font-size: 14px;
             font-weight: 500;
-            margin-top: 4px;
+            margin-top: 5px;
+            letter-spacing: 1px;
+            text-transform: uppercase;
         }}
 
-        /* --- MOBILE RESPONSIVE: CHỐNG RỚT CHỮ --- */
-        @media (max-width: 480px) {{
-            .login-card {{ padding: 25px 20px; }}
-            .header-group {{ gap: 12px; margin-bottom: 25px; }}
-            
-            /* Thu nhỏ logo chút xíu trên điện thoại */
-            .uni-logo-img {{ width: 60px; height: 60px; }}
-            
-            /* Thu nhỏ chữ để vẫn nằm ngang hàng với logo */
-            .uni-name {{ font-size: 18px; }}
-            .uni-sub {{ font-size: 13px; }}
+        /* MEDIA QUERY: ĐIỆN THOẠI (Dưới 600px) */
+        @media (max-width: 600px) {{
+            .brand-wrapper {{
+                flex-direction: column; /* Chuyển thành hàng dọc */
+                gap: 15px;
+            }}
+            .text-wrapper {{
+                text-align: center; /* Căn giữa chữ */
+            }}
+            .uni-name {{
+                font-size: 20px; /* Giảm cỡ chữ chút cho vừa màn hình */
+            }}
+            .header-section {{
+                padding: 30px 20px;
+            }}
         }}
 
-        /* 4. INPUT & BUTTON (Phong cách Harvard) */
+        /* PHẦN BODY (FORM NHẬP LIỆU) */
+        .form-section {{
+            padding: 30px 50px 40px 50px;
+        }}
+        @media (max-width: 600px) {{
+            .form-section {{ padding: 20px 25px 30px 25px; }}
+        }}
+
+        /* TÙY BIẾN INPUT CỦA STREAMLIT */
         .stTextInput input {{
-            border-radius: 3px !important;
-            border: 1px solid #ccc;
-            padding: 12px 15px !important;
-            font-size: 16px !important;
+            border: 1px solid #e2e8f0;
+            border-radius: 4px;
+            padding: 12px 15px;
+            font-size: 16px;
+            background-color: #fff; /* Ép nền trắng tránh lỗi dark mode */
+            color: #333;
+            transition: all 0.2s;
         }}
         .stTextInput input:focus {{
-            border-color: #A41034 !important;
-            box-shadow: 0 0 0 1px #A41034 !important;
+            border-color: #b71c1c;
+            box-shadow: 0 0 0 3px rgba(183, 28, 28, 0.1);
         }}
-        
+        .stTextInput label {{
+            font-family: 'Inter', sans-serif;
+            font-weight: 600;
+            color: #475569;
+            font-size: 14px;
+        }}
+
+        /* TÙY BIẾN BUTTON */
         div.stButton > button {{
-            background-color: #A41034; /* Harvard Crimson */
-            color: white;
-            border-radius: 3px;
-            font-weight: 700 !important;
+            background-color: #b71c1c;
+            color: #ffffff;
+            font-family: 'Inter', sans-serif;
+            font-weight: 700;
             text-transform: uppercase;
-            font-size: 16px !important;
-            padding: 14px 24px !important;
-            width: 100%;
+            padding: 0.6rem 1rem;
+            border-radius: 4px;
             border: none;
-            margin-top: 10px;
-            transition: background 0.2s;
+            width: 100%;
+            margin-top: 15px;
+            box-shadow: 0 4px 6px rgba(183, 28, 28, 0.2);
+            transition: transform 0.1s;
         }}
         div.stButton > button:hover {{
-            background-color: #850c29;
+            background-color: #9a1010;
+            transform: translateY(-1px);
+        }}
+        
+        /* TABS STYLE */
+        .stTabs [data-baseweb="tab-list"] {{
+            border-bottom: 2px solid #f1f5f9;
+            margin-bottom: 25px;
+        }}
+        .stTabs [data-baseweb="tab"] {{
+            font-family: 'Inter', sans-serif;
+            font-weight: 600;
+            color: #64748b;
+            border: none;
+            background: transparent;
+        }}
+        .stTabs [aria-selected="true"] {{
+            color: #b71c1c !important;
+            border-bottom: 3px solid #b71c1c !important;
         }}
 
-        /* 5. TABS TINH TẾ */
-        .stTabs [data-baseweb="tab-list"] {{ border-bottom: 2px solid #eee; margin-bottom: 25px; }}
-        .stTabs [data-baseweb="tab"] {{ font-weight: 600; color: #777; }}
-        .stTabs [aria-selected="true"] {{ color: #A41034 !important; border-bottom: 3px solid #A41034 !important; }}
-
-        /* 6. FOOTER MỚI */
-        .custom-footer {{
+        /* FOOTER */
+        .login-footer {{
             text-align: center;
+            font-family: 'Inter', sans-serif;
+            color: #94a3b8;
+            font-size: 12px;
             margin-top: 30px;
             padding-top: 20px;
-            border-top: 1px solid #eee;
-            color: #888;
-            font-size: 13px;
-            font-family: 'Roboto', sans-serif;
+            border-top: 1px solid #f8fafc;
         }}
-        .custom-footer b {{ color: #333; }}
+        .login-footer b {{
+            color: #64748b;
+        }}
     </style>
     """, unsafe_allow_html=True)
 
-    # --- RENDER GIAO DIỆN ---
-    # Dùng wrapper div thay vì st.columns để căn giữa hoàn hảo trên mọi màn hình
-    
-    st.markdown(f"""
-    <div class="login-wrapper">
-        <div class="login-card">
-            <div class="header-group">
-                <img src="{LOGO_URL}" class="uni-logo-img">
-                <div class="uni-info">
-                    <div class="uni-name"> TRƯỜNG ĐẠI HỌC CẢNH SÁT NHÂN DÂN </div>
+    # --- LAYOUT HTML CARD ---
+    # Sử dụng columns để căn giữa card trong trang
+    col_spacer_l, col_main, col_spacer_r = st.columns([1, 6, 1])
+
+    with col_main:
+        # Bắt đầu Card
+        st.markdown(f"""
+        <div class="login-card-container">
+            <div class="header-section">
+                <div class="brand-wrapper">
+                    <img src="{LOGO_URL}" class="logo-img">
+                    <div class="text-wrapper">
+                        <h1 class="uni-name">Trường Đại Học<br>Cảnh Sát Nhân Dân</h1>
+                        <div class="uni-sub">People's Police University</div>
+                    </div>
                 </div>
             </div>
-                <div style="text-align:center; margin-bottom:20px; color:#333; font-weight:500;">
-                    Vui lòng đăng nhập để tiếp tục
+            
+            <div class="form-section">
+        """, unsafe_allow_html=True)
+
+        # Tabs Streamlit
+        tab_sv, tab_gv = st.tabs(["CỔNG HỌC VIÊN", "CỔNG GIẢNG VIÊN"])
+
+        with tab_sv:
+            c_class = st.selectbox("Lớp học phần", list(CLASSES.keys()), key="s_class")
+            c_pass = st.text_input("Mã bảo mật", type="password", placeholder="Nhập mã lớp...", key="s_pass")
+            
+            st.markdown('<div style="margin-top:10px; font-size:13px; color:#64748b; display:flex; align-items:center; gap:5px;"><input type="checkbox" checked style="accent-color:#b71c1c;"> Ghi nhớ đăng nhập</div>', unsafe_allow_html=True)
+            
+            if st.button("ĐĂNG NHẬP", key="btn_s"):
+                cid = CLASSES[c_class]
+                if c_pass.strip() == PASSWORDS[cid]:
+                    st.session_state.update({"logged_in": True, "role": "student", "class_id": cid, "page": "class_home"})
+                    st.rerun()
+                else:
+                    st.error("Mã bảo mật không chính xác.")
+
+        with tab_gv:
+            gv_class = st.selectbox("Lớp quản lý", list(CLASSES.keys()), key="g_class")
+            t_pass = st.text_input("Mật khẩu Giảng viên", type="password", placeholder="Nhập mật khẩu...", key="g_pass")
+            
+            st.markdown('<div style="margin-top:10px; font-size:13px; color:#64748b; display:flex; align-items:center; gap:5px;"><input type="checkbox" style="accent-color:#b71c1c;"> Ghi nhớ đăng nhập</div>', unsafe_allow_html=True)
+            
+            if st.button("ĐĂNG NHẬP QUẢN TRỊ", key="btn_g"):
+                if t_pass == "779":
+                    cid = CLASSES[gv_class]
+                    st.session_state.update({
+                        "logged_in": True,
+                        "role": "teacher",
+                        "class_id": cid,
+                        "page": "class_home"
+                    })
+                    st.rerun()
+                else:
+                    st.error("Sai mật khẩu quản trị.")
+
+        # Footer
+        st.markdown("""
+                <div class="login-footer">
+                    Hệ thống Tương tác Lớp học & Giảng dạy Số<br>
+                    Phát triển bởi Giảng viên <b>Trần Nguyễn Sĩ Nguyên</b>
                 </div>
-    """, unsafe_allow_html=True)
-
-    # Tabs
-    tab_sv, tab_gv = st.tabs(["HỌC VIÊN", "GIẢNG VIÊN"])
-
-    with tab_sv:
-        c_class = st.selectbox("Chọn lớp học", list(CLASSES.keys()), key="s_class")
-        c_pass = st.text_input("Mã bảo mật", type="password", placeholder="Nhập mã lớp...", key="s_pass")
-        
-        # Checkbox style đơn giản
-        st.markdown('<div style="font-size:14px; color:#555; margin:10px 0;"><input type="checkbox" checked> Duy trì đăng nhập</div>', unsafe_allow_html=True)
-        
-        if st.button("ĐĂNG NHẬP", key="btn_s"):
-            cid = CLASSES[c_class]
-            if c_pass.strip() == PASSWORDS[cid]:
-                st.session_state.update({"logged_in": True, "role": "student", "class_id": cid, "page": "class_home"})
-                st.rerun()
-            else:
-                st.error("Mã lớp không chính xác.")
-
-    with tab_gv:
-        gv_class = st.selectbox("Lớp quản lý", list(CLASSES.keys()), key="g_class")
-        t_pass = st.text_input("Mật khẩu", type="password", placeholder="Nhập mật khẩu của giảng viên...", key="g_pass")
-        
-        st.markdown('<div style="font-size:14px; color:#555; margin:10px 0;"><input type="checkbox"> Duy trì đăng nhập</div>', unsafe_allow_html=True)
-        
-        if st.button("ĐĂNG NHẬP QUẢN TRỊ", key="btn_g"):
-            if t_pass == "779":
-                cid = CLASSES[gv_class]
-                st.session_state.update({
-                    "logged_in": True,
-                    "role": "teacher",
-                    "class_id": cid,
-                    "page": "class_home"
-                })
-                st.rerun()
-            else:
-                st.error("Sai mật khẩu.")
-
-    # Footer mới
-    st.markdown("""
-            <div class="custom-footer">
-                Phát triển bởi Giảng viên <b>Trần Nguyễn Sĩ Nguyên</b>
-            </div>
-        </div> </div> """, unsafe_allow_html=True)
+            </div> </div> """, unsafe_allow_html=True)
 
     st.stop()
 # ==========================================
