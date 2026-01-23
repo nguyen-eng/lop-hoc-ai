@@ -523,7 +523,7 @@ st.markdown(f"""
    Mục tiêu: dễ thao tác, không cần zoom, không gây reload
    ========================= */
 @media (max-width: 600px){
-  html {{ font-size: 16px !important; }}
+  html { font-size: 16px !important; }
 
   html, body, [class*="css"]{{
     font-size: 16px !important;
