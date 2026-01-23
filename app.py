@@ -893,229 +893,186 @@ def oe_count_answers(cid: str, qid: str) -> int:
     df = load_data(cid, "openended", suffix=qid)
     return int(len(df)) if df is not None else 0
 # ==========================================
-# 4. MÀN HÌNH ĐĂNG NHẬP (ROYAL RED & GOLD EDITION)
+# 4. MÀN HÌNH ĐĂNG NHẬP (HARVARD ACADEMIC STYLE)
 # ==========================================
 if (not st.session_state.get("logged_in", False)) or (st.session_state.get("page", "login") == "login"):
     st.session_state["page"] = "login"
 
-    # --- CSS ĐẶC BIỆT: PHONG CÁCH "STATE CEREMONIAL" ---
+    # --- CẤU HÌNH CSS MÔ PHỎNG HARVARD LOGIN ---
     st.markdown(f"""
     <style>
-        @import url('https://fonts.googleapis.com/css2?family=Playfair+Display:wght@700;900&family=Roboto:wght@400;500;700&display=swap');
+        /* Import font chữ phong cách hàn lâm */
+        @import url('https://fonts.googleapis.com/css2?family=Roboto:wght@400;500;700&family=Merriweather:wght@700&display=swap');
 
-        /* Xóa padding mặc định của Streamlit */
-        .block-container {{padding: 0 !important; max-width: 100% !important;}}
+        /* 1. NỀN TRANG: TRẮNG SẠCH (WHITE SPACE) */
+        .stApp {{
+            background-color: #fcfcfc;
+        }}
+        .block-container {{
+            padding-top: 50px !important;
+            max-width: 100% !important;
+        }}
         [data-testid="stHeader"] {{display: none;}}
-        
-        /* 1. NỀN TOÀN MÀN HÌNH: ĐỎ BORDEAUX SANG TRỌNG */
-        .login-bg {{
-            position: fixed;
-            top: 0; left: 0; width: 100vw; height: 100vh;
-            /* Gradient đỏ đậm tạo chiều sâu, không bị chói */
-            background: linear-gradient(135deg, #4a0000 0%, #8b0000 60%, #b71c1c 100%);
-            z-index: 0;
-        }}
-        
-        /* Họa tiết chìm (Pattern) tạo nét cổ điển */
-        .login-pattern {{
-            position: absolute; top: 0; left: 0; width: 100%; height: 100%;
-            background-image: 
-                radial-gradient(#ffd700 1px, transparent 1px),
-                radial-gradient(#ffd700 1px, transparent 1px);
-            background-size: 60px 60px;
-            background-position: 0 0, 30px 30px;
-            opacity: 0.07; /* Rất mờ để tinh tế */
-        }}
 
-        /* 2. KHUNG ĐĂNG NHẬP (CARD) */
-        .login-container {{
-            position: relative; z-index: 10;
-            display: flex; justify-content: center; align-items: center;
-            height: 100vh; width: 100%;
-            padding: 20px;
-        }}
-
-        .login-card {{
+        /* 2. CARD ĐĂNG NHẬP CHÍNH */
+        .login-card-container {{
             background: #ffffff;
-            width: 100%; max-width: 1000px; /* Rộng hơn để bề thế */
-            border-radius: 4px; /* Bo góc ít để cứng cáp, nam tính */
-            box-shadow: 
-                0 20px 50px rgba(0,0,0,0.5), 
-                0 0 0 6px rgba(197, 160, 89, 0.3); /* Viền hào quang vàng */
-            overflow: hidden;
-            display: flex; flex-direction: column;
-            border-top: 8px solid #C5A059; /* Thanh vàng kim loại trên cùng */
-            animation: slideUp 0.8s cubic-bezier(0.2, 0.8, 0.2, 1);
+            border: 1px solid #e1e1e1; /* Viền mỏng tinh tế */
+            border-radius: 4px; /* Bo góc cực nhẹ, nam tính */
+            padding: 40px 50px;
+            box-shadow: 0 4px 12px rgba(0,0,0,0.05); /* Bóng mờ nhẹ */
+            max-width: 500px;
+            margin: 0 auto;
+            text-align: left;
         }}
 
-        @keyframes slideUp {{
-            from {{ opacity: 0; transform: translateY(60px); }}
-            to {{ opacity: 1; transform: translateY(0); }}
-        }}
-
-        /* 3. HEADER CỦA CARD */
-        .card-header {{
-            background: #fff;
-            padding: 50px 60px 30px 60px;
-            text-align: center;
-            border-bottom: 1px solid #eee;
-        }}
-
-        .uni-title {{
-            color: #b71c1c; /* Đỏ cờ */
-            font-family: 'Playfair Display', serif; /* Font có chân sang trọng */
-            font-size: 48px !important;
-            font-weight: 900;
-            text-transform: uppercase;
-            letter-spacing: 1px;
-            margin-bottom: 10px;
-            text-shadow: 0 1px 1px rgba(0,0,0,0.1);
-        }}
-
-        .uni-sub {{
-            color: #C5A059; /* Vàng Gold */
-            font-family: 'Roboto', sans-serif;
-            font-size: 26px !important;
-            font-weight: 700;
-            text-transform: uppercase;
-            letter-spacing: 3px;
-        }}
-
-        /* 4. BODY & TABS */
-        .card-body {{
-            padding: 40px 80px 60px 80px;
-            background: #fdfdfd;
-        }}
-
-        /* Tùy biến Tabs thành dạng nút bấm sang trọng */
-        .stTabs [data-baseweb="tab-list"] {{
+        /* 3. LOGO & HEADER */
+        .hbs-logo-area {{
+            display: flex;
+            align-items: center;
             justify-content: center;
+            margin-bottom: 25px;
             gap: 15px;
-            margin-bottom: 40px;
-            border-bottom: none;
         }}
-        .stTabs [data-baseweb="tab"] {{
-            background-color: white;
-            border: 2px solid #e0e0e0;
-            color: #757575;
-            padding: 15px 40px;
-            border-radius: 50px; /* Nút tròn viên thuốc */
+        .uni-name {{
+            font-family: 'Merriweather', serif; /* Font có chân quyền lực */
+            color: #A41034; /* Đỏ Harvard (Crimson) */
+            font-size: 26px;
             font-weight: 700;
-            font-size: 24px;
-            transition: all 0.3s;
+            line-height: 1.2;
+            text-transform: uppercase;
         }}
-        .stTabs [aria-selected="true"] {{
-            background-color: #b71c1c !important; /* Chọn là màu đỏ */
-            color: #FFD700 !important; /* Chữ vàng */
-            border-color: #b71c1c !important;
-            box-shadow: 0 5px 15px rgba(183, 28, 28, 0.3);
+        .sub-name {{
+            font-family: 'Roboto', sans-serif;
+            color: #222;
+            font-size: 18px;
+            font-weight: 500;
         }}
 
-        /* Input fields */
+        /* 4. INPUT FIELDS (Sắc nét) */
+        /* Tác động sâu vào widget của Streamlit để bỏ bo tròn */
         .stTextInput input {{
-            background-color: #f8f9fa;
-            border: 1px solid #d1d5db;
+            border-radius: 2px !important;
+            border: 1px solid #ccc;
+            padding: 12px 15px !important;
+            font-size: 16px !important;
             color: #333;
-            border-radius: 8px;
-            padding: 20px !important;
-            font-size: 28px !important;
+            background-color: #fff;
         }}
         .stTextInput input:focus {{
-            border-color: #b71c1c;
-            box-shadow: 0 0 0 2px rgba(183, 28, 28, 0.1);
+            border-color: #A41034 !important; /* Focus màu đỏ */
+            box-shadow: 0 0 0 1px #A41034 !important;
+        }}
+        /* Label của input */
+        .stTextInput label {{
+            font-size: 14px !important;
+            color: #555 !important;
+            font-weight: 500 !important;
         }}
 
-        /* 5. NÚT BẤM (BUTTON) - GOLD STYLE */
+        /* 5. NÚT BẤM (Chuẩn Harvard Red) */
         div.stButton > button {{
-            background: linear-gradient(to bottom, #C5A059 0%, #9A7B3E 100%); /* Gradient Vàng kim */
+            background-color: #A41034; /* MÀU ĐỎ QUYỀN LỰC */
             color: white;
             border: none;
-            border-radius: 6px;
+            border-radius: 2px; /* Gần như vuông */
             font-weight: 700 !important;
             text-transform: uppercase;
-            letter-spacing: 1px;
-            font-size: 30px !important;
-            padding: 24px !important;
-            box-shadow: 0 6px 20px rgba(197, 160, 89, 0.4);
-            text-shadow: 0 1px 2px rgba(0,0,0,0.2);
-            transition: transform 0.2s;
+            letter-spacing: 0.5px;
+            font-size: 16px !important;
+            padding: 12px 24px !important;
+            width: 100%;
+            margin-top: 10px;
+            transition: background 0.2s;
         }}
         div.stButton > button:hover {{
-            transform: translateY(-2px);
-            background: linear-gradient(to bottom, #d4af66 0%, #a88846 100%);
+            background-color: #8a0c2b; /* Đậm hơn khi hover */
+            color: #fff;
         }}
 
-        /* Footer */
-        .card-footer {{
-            text-align: center;
-            padding: 20px;
-            background: #f9f9f9;
-            border-top: 1px solid #eee;
-            color: #888;
-            font-size: 18px !important;
-            font-style: italic;
+        /* 6. TABS & FOOTER */
+        .stTabs [data-baseweb="tab-list"] {{
+            margin-bottom: 20px;
+            border-bottom: 2px solid #eee;
+        }}
+        .stTabs [data-baseweb="tab"] {{
+            font-weight: 600;
+            color: #666;
+            border: none;
+            background: transparent;
+        }}
+        .stTabs [aria-selected="true"] {{
+            color: #A41034 !important;
+            border-bottom: 3px solid #A41034 !important;
         }}
         
-        /* Selectbox fix */
-        [data-baseweb="select"] {{
-            font-size: 28px !important;
+        .footer-text {{
+            margin-top: 30px;
+            text-align: center;
+            font-size: 12px;
+            color: #888;
+            border-top: 1px solid #eee;
+            padding-top: 20px;
+        }}
+        .footer-text a {{
+            color: #555; text-decoration: none; margin: 0 8px;
+        }}
+        .footer-text a:hover {{ text-decoration: underline; color: #A41034; }}
+
+        .login-title {{
+            text-align: center;
+            font-size: 18px;
+            font-weight: 500;
+            margin-bottom: 20px;
+            color: #333;
         }}
     </style>
-
-    <div class="login-bg">
-        <div class="login-pattern"></div>
-    </div>
     """, unsafe_allow_html=True)
 
-    # --- LAYOUT CARD ---
-    # Căn giữa màn hình bằng columns
-    col_Spacer1, col_Main, col_Spacer2 = st.columns([1, 10, 1])
+    # --- LAYOUT CHÍNH (CĂN GIỮA NHƯ HÌNH) ---
+    col_L, col_Mid, col_R = st.columns([1, 2, 1]) # Chia cột để card nằm giữa
 
-    with col_Main:
+    with col_Mid:
+        # Bắt đầu Card HTML
         st.markdown(f"""
-        <div class="login-container">
-            <div class="login-card">
-                <div class="card-header">
-                    <div style="display:flex; flex-direction:column; align-items:center; gap:15px;">
-                        <img src="{LOGO_URL}" style="width:120px; height:120px; object-fit:contain; filter: drop-shadow(0 4px 6px rgba(0,0,0,0.1));">
-                        <div>
-                            <div class="uni-title">TRƯỜNG ĐẠI HỌC CẢNH SÁT NHÂN DÂN</div>
-                            <div class="uni-sub">KHOA LÝ LUẬN CHÍNH TRỊ & KHXHNV</div>
-                        </div>
-                    </div>
+        <div class="login-card-container">
+            <div class="hbs-logo-area">
+                <img src="{LOGO_URL}" style="width:65px; height:65px; object-fit:contain;">
+                <div>
+                    <div class="uni-name">ĐẠI HỌC CẢNH SÁT</div>
+                    <div class="sub-name">NHÂN DÂN</div>
                 </div>
-
-                <div class="card-body">
+            </div>
+            <div class="login-title">Vui lòng đăng nhập để tiếp tục</div>
         """, unsafe_allow_html=True)
 
-        # Tabs chọn vai trò
-        tab_sv, tab_gv = st.tabs(["CỔNG HỌC VIÊN", "QUẢN TRỊ VIÊN"])
+        # Tabs: Học viên vs Giảng viên (Thay cho "Or login with" của Harvard)
+        tab_sv, tab_gv = st.tabs(["HỌC VIÊN", "GIẢNG VIÊN"])
 
         with tab_sv:
-            st.write("") 
-            st.markdown("<p style='text-align:center; color:#666; font-size:24px; margin-bottom:20px;'>Hệ thống học tập và tương tác số</p>", unsafe_allow_html=True)
+            # Form Học viên
+            c_class = st.selectbox("Lớp học phần", list(CLASSES.keys()), key="h_class_select")
+            c_pass = st.text_input("Mã bảo mật", type="password", key="h_pass_input")
             
-            c_class = st.selectbox("Lựa chọn lớp học phần", list(CLASSES.keys()))
-            c_pass = st.text_input("Mã bảo mật lớp", type="password", placeholder="Nhập mã lớp...")
-            
-            st.write("")
-            if st.button("ĐĂNG NHẬP VÀO LỚP", key="btn_join", use_container_width=True):
+            # Checkbox "Keep me signed in" giả lập
+            st.markdown('<div style="font-size:14px; color:#666; margin: 10px 0;"><input type="checkbox" checked> Duy trì đăng nhập</div>', unsafe_allow_html=True)
+
+            if st.button("ĐĂNG NHẬP", key="btn_join_h"):
                 cid = CLASSES[c_class]
                 if c_pass.strip() == PASSWORDS[cid]:
                     st.session_state.update({"logged_in": True, "role": "student", "class_id": cid, "page": "class_home"})
                     st.rerun()
                 else:
-                    st.error("Mã lớp không chính xác.")
+                    st.error("Thông tin đăng nhập không chính xác.")
 
         with tab_gv:
-            st.write("")
-            st.markdown("<p style='text-align:center; color:#666; font-size:24px; margin-bottom:20px;'>Dành cho Giảng viên & Cán bộ quản lý</p>", unsafe_allow_html=True)
+            # Form Giảng viên
+            gv_class = st.selectbox("Lớp quản lý", list(CLASSES.keys()), key="g_class_select")
+            t_pass = st.text_input("Mật khẩu Admin", type="password", key="g_pass_input")
             
-            gv_class = st.selectbox("Chọn lớp quản lý", list(CLASSES.keys()), key="gv_choose_class")
-            t_pass = st.text_input("Mật khẩu Giảng viên", type="password", placeholder="Nhập mật khẩu...")
-            
-            st.write("")
-            if st.button("TRUY CẬP QUẢN TRỊ", key="btn_admin", use_container_width=True):
+            st.markdown('<div style="font-size:14px; color:#666; margin: 10px 0;"><input type="checkbox"> Duy trì đăng nhập</div>', unsafe_allow_html=True)
+
+            if st.button("ĐĂNG NHẬP (GV)", key="btn_join_g"):
                 if t_pass == "779":
                     cid = CLASSES[gv_class]
                     st.session_state.update({
@@ -1126,16 +1083,18 @@ if (not st.session_state.get("logged_in", False)) or (st.session_state.get("page
                     })
                     st.rerun()
                 else:
-                    st.error("Sai mật khẩu quản trị.")
+                    st.error("Sai mật khẩu giảng viên.")
 
+        # Footer HTML (Bên trong card hoặc ngay dưới)
         st.markdown("""
-                </div>
-                <div class="card-footer">
-                    Phát triển bởi Giảng viên Trần Nguyễn Sĩ Nguyên - T05
-                </div>
+            <div class="footer-text">
+                <a href="#">Trang chủ T05</a> • 
+                <a href="#">Quy chế đào tạo</a> • 
+                <a href="#">Hỗ trợ kỹ thuật</a>
+                <br><br>
+                Copyright © 2026 People's Police University
             </div>
-        </div>
-        """, unsafe_allow_html=True)
+        </div> """, unsafe_allow_html=True)
 
     st.stop()
 # ==========================================
