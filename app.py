@@ -1044,17 +1044,16 @@ if (not st.session_state.get("logged_in", False)) or (st.session_state.get("page
                     <div class="uni-name"> TRƯỜNG ĐẠI HỌC CẢNH SÁT NHÂN DÂN </div>
                 </div>
             </div>
-
-            <div style="text-align:center; margin-bottom:20px; color:#333; font-weight:500;">
-                Vui lòng đăng nhập để tiếp tục
-            </div>
+                <div style="text-align:center; margin-bottom:20px; color:#333; font-weight:500;">
+                    Vui lòng đăng nhập để tiếp tục
+                </div>
     """, unsafe_allow_html=True)
 
     # Tabs
     tab_sv, tab_gv = st.tabs(["HỌC VIÊN", "GIẢNG VIÊN"])
 
     with tab_sv:
-        c_class = st.selectbox("Lớp học phần", list(CLASSES.keys()), key="s_class")
+        c_class = st.selectbox("Chọn lớp học", list(CLASSES.keys()), key="s_class")
         c_pass = st.text_input("Mã bảo mật", type="password", placeholder="Nhập mã lớp...", key="s_pass")
         
         # Checkbox style đơn giản
@@ -1070,7 +1069,7 @@ if (not st.session_state.get("logged_in", False)) or (st.session_state.get("page
 
     with tab_gv:
         gv_class = st.selectbox("Lớp quản lý", list(CLASSES.keys()), key="g_class")
-        t_pass = st.text_input("Mật khẩu Admin", type="password", placeholder="Nhập mật khẩu GV...", key="g_pass")
+        t_pass = st.text_input("Mật khẩu", type="password", placeholder="Nhập mật khẩu của giảng viên...", key="g_pass")
         
         st.markdown('<div style="font-size:14px; color:#555; margin:10px 0;"><input type="checkbox"> Duy trì đăng nhập</div>', unsafe_allow_html=True)
         
