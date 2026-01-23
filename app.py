@@ -1105,13 +1105,13 @@ if (not st.session_state.get("logged_in", False)) or (st.session_state.get("page
             }}
         }}
         /* ===== SEGMENTED RADIO (THAY TAB – MOBILE SAFE) ===== */
-        div[role="radiogroup"]{
+        div[role="radiogroup"]{{
           display:flex;
           gap:10px;
           justify-content:center;
           margin-bottom: 18px;
-        }
-        div[role="radiogroup"] label{
+        }}
+        div[role="radiogroup"] label{{
           border: 1px solid #e2e8f0 !important;
           padding: 10px 14px !important;
           border-radius: 999px !important;
@@ -1119,12 +1119,12 @@ if (not st.session_state.get("logged_in", False)) or (st.session_state.get("page
           font-family: 'Inter', sans-serif !important;
           font-weight: 800 !important;
           color: #64748b !important;
-        }
-        div[role="radiogroup"] label:has(input:checked){
+        }}
+        div[role="radiogroup"] label:has(input:checked){{
           border-color: #b71c1c !important;
           color: #b71c1c !important;
           background: rgba(183,28,28,0.06) !important;
-        }
+        }}
     </style>
     """, unsafe_allow_html=True)
 
