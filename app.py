@@ -893,65 +893,208 @@ def oe_count_answers(cid: str, qid: str) -> int:
     df = load_data(cid, "openended", suffix=qid)
     return int(len(df)) if df is not None else 0
 # ==========================================
-# 4. MÀN HÌNH ĐĂNG NHẬP (PRO)
+# ==========================================
+# 4. MÀN HÌNH ĐĂNG NHẬP (ULTRA PRO - UPDATED)
 # ==========================================
 if (not st.session_state.get("logged_in", False)) or (st.session_state.get("page", "login") == "login"):
     st.session_state["page"] = "login"
 
-    st.markdown("<div class='hero-wrap'>", unsafe_allow_html=True)
-    st.markdown("""
-        <div class="hero-card">
-            <div class="hero-top">
-                <div class="hero-badge">
-                    <img src="{logo}" style="width:72px; height:72px; object-fit:contain;" />
+    # --- CSS RIÊNG CHO MÀN HÌNH LOGIN ---
+    st.markdown(f"""
+    <style>
+        /* Ẩn bớt các element thừa của Streamlit để màn hình sạch */
+        [data-testid="stHeader"] {{background: transparent;}}
+        .block-container {{padding: 0 !important; max-width: 100% !important;}}
+        
+        /* Background toàn màn hình */
+        .login-bg {{
+            position: fixed;
+            top: 0; left: 0; width: 100vw; height: 100vh;
+            background: linear-gradient(135deg, #004b35 0%, #007a5e 100%);
+            z-index: 0;
+        }}
+        
+        /* Họa tiết trang trí nền (Pattern) */
+        .login-pattern {{
+            position: absolute;
+            top: 0; left: 0; width: 100%; height: 100%;
+            background-image: radial-gradient(#ffffff 1px, transparent 1px);
+            background-size: 40px 40px;
+            opacity: 0.05;
+        }}
+
+        /* Container chính căn giữa */
+        .login-container {{
+            position: relative;
+            z-index: 1;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            height: 100vh;
+            padding: 20px;
+        }}
+
+        /* Thẻ Card đăng nhập (Glassmorphism) */
+        .login-card {{
+            background: rgba(255, 255, 255, 0.95);
+            width: 100%;
+            max-width: 900px;
+            border-radius: 30px;
+            box-shadow: 0 25px 80px rgba(0,0,0,0.4);
+            overflow: hidden;
+            display: flex;
+            flex-direction: column;
+            animation: fadeIn 0.8s ease-out;
+        }}
+
+        @keyframes fadeIn {{
+            from {{ opacity: 0; transform: translateY(30px); }}
+            to {{ opacity: 1; transform: translateY(0); }}
+        }}
+
+        /* Header của Card */
+        .card-header {{
+            background: linear-gradient(to right, #f8fafc, #fff);
+            padding: 40px 50px;
+            border-bottom: 2px solid #e2e8f0;
+            display: flex;
+            align-items: center;
+            gap: 30px;
+        }}
+        
+        .logo-box {{
+            width: 110px; height: 110px;
+            background: white;
+            border-radius: 22px;
+            padding: 10px;
+            box-shadow: 0 10px 30px rgba(0,0,0,0.08);
+            display: flex; align-items: center; justify-content: center;
+            border: 1px solid #f1f5f9;
+        }}
+
+        .header-text h1 {{
+            color: {PRIMARY_COLOR};
+            font-weight: 900;
+            font-size: 42px !important;
+            margin: 0;
+            line-height: 1.2;
+            text-transform: uppercase;
+            letter-spacing: 1px;
+        }}
+        
+        .header-text p {{
+            color: {MUTED};
+            font-size: 28px !important;
+            font-weight: 600;
+            margin-top: 8px;
+        }}
+
+        /* Body của Card */
+        .card-body {{
+            padding: 40px 50px;
+        }}
+        
+        /* Tùy chỉnh Tabs cho đẹp hơn */
+        .stTabs [data-baseweb="tab-list"] {{
+            gap: 20px;
+            margin-bottom: 20px;
+        }}
+        .stTabs [data-baseweb="tab"] {{
+            height: 60px;
+            border-radius: 12px;
+            background-color: #f1f5f9;
+            border: none;
+            color: #64748b;
+            font-weight: 700;
+            flex: 1; 
+        }}
+        .stTabs [aria-selected="true"] {{
+            background-color: {PRIMARY_COLOR} !important;
+            color: white !important;
+        }}
+
+        /* Footer nhỏ */
+        .card-footer {{
+            text-align: center;
+            padding: 20px;
+            background: #f8fafc;
+            border-top: 1px solid #e2e8f0;
+            color: #94a3b8;
+            font-size: 20px !important;
+            font-weight: 600;
+        }}
+
+    </style>
+    
+    <div class="login-bg"><div class="login-pattern"></div></div>
+    """, unsafe_allow_html=True)
+
+    # --- LAYOUT CHÍNH ---
+    # Dùng columns để căn giữa card thủ công trên nền bg
+    col_center = st.columns([1, 8, 1])[1]
+    
+    with col_center:
+        st.markdown(f"""
+        <div class="login-container">
+            <div class="login-card">
+                <div class="card-header">
+                    <div class="logo-box">
+                        <img src="{LOGO_URL}" style="width:100%; height:100%; object-fit:contain;">
+                    </div>
+                    <div class="header-text">
+                        <h1>ĐẠI HỌC CẢNH SÁT NHÂN DÂN</h1>
+                        <p>Hệ thống Tương tác Lớp học & Giảng dạy Số</p>
+                    </div>
                 </div>
-                <div>
-                    <p class="hero-title">TRƯỜNG ĐẠI HỌC CẢNH SÁT NHÂN DÂN</p>
-                    <p class="hero-sub">Hệ thống tương tác lớp học </p>
+                <div class="card-body">
+        """, unsafe_allow_html=True)
+
+        # Tabs Streamlit nằm trong card-body
+        tab_sv, tab_gv = st.tabs(["🎓 CỔNG HỌC VIÊN", "👮‍♂️ CỔNG GIẢNG VIÊN"])
+
+        with tab_sv:
+            st.write("") # Spacer
+            c_class = st.selectbox("📌 Chọn lớp học phần", list(CLASSES.keys()))
+            c_pass = st.text_input("🔑 Mã lớp", type="password", placeholder="Nhập mã lớp do GV cung cấp...")
+            
+            st.write("") # Spacer
+            if st.button("THAM GIA LỚP HỌC NGAY", key="btn_join", use_container_width=True):
+                cid = CLASSES[c_class]
+                if c_pass.strip() == PASSWORDS[cid]:
+                    st.session_state.update({"logged_in": True, "role": "student", "class_id": cid, "page": "class_home"})
+                    st.rerun()
+                else:
+                    st.error("❌ Sai mã lớp! Vui lòng kiểm tra lại.")
+
+        with tab_gv:
+            st.write("") # Spacer
+            gv_class = st.selectbox("📌 Chọn lớp quản trị", list(CLASSES.keys()), key="gv_choose_class")
+            t_pass = st.text_input("🛡️ Mật khẩu quản trị", type="password", placeholder="Nhập mật khẩu giảng viên...")
+            
+            st.write("") # Spacer
+            if st.button("TRUY CẬP HỆ THỐNG", key="btn_admin", use_container_width=True):
+                if t_pass == "779":
+                    cid = CLASSES[gv_class]
+                    st.session_state.update({
+                        "logged_in": True,
+                        "role": "teacher",
+                        "class_id": cid,
+                        "page": "class_home"
+                    })
+                    st.rerun()
+                else:
+                    st.error("❌ Sai mật khẩu quản trị.")
+
+        st.markdown("""
                 </div>
-            </div>
-            <div class="hero-body">
-                <div class="hero-meta">
-                    <b>Khoa:</b> LLCT &amp; KHXHNV<br>
-                    <b>Giảng viên:</b> Trần Nguyễn Sĩ Nguyên
+                <div class="card-footer">
+                    Khoa LLCT & KHXHNV • Giảng viên: Trần Nguyễn Sĩ Nguyên
                 </div>
             </div>
         </div>
-    """.format(logo=LOGO_URL), unsafe_allow_html=True)
+        """, unsafe_allow_html=True)
 
-    st.write("")
-    tab_sv, tab_gv = st.tabs(["CỔNG HỌC VIÊN", "CỔNG GIẢNG VIÊN"])
-
-    with tab_sv:
-        c_class = st.selectbox("Chọn lớp", list(CLASSES.keys()))
-        c_pass = st.text_input("Mã lớp", type="password")
-        if st.button("THAM GIA LỚP HỌC", key="btn_join"):
-            cid = CLASSES[c_class]
-            if c_pass.strip() == PASSWORDS[cid]:
-                st.session_state.update({"logged_in": True, "role": "student", "class_id": cid, "page": "class_home"})
-                st.rerun()
-            else:
-                st.error("Sai mã lớp!")
-
-    with tab_gv:
-        gv_class = st.selectbox("Chọn lớp để quản trị", list(CLASSES.keys()), key="gv_choose_class")
-        t_pass = st.text_input("Mật khẩu Admin", type="password")
-        if st.button("VÀO QUẢN TRỊ", key="btn_admin"):
-            if t_pass == "779":
-                cid = CLASSES[gv_class]
-                st.session_state.update({
-                    "logged_in": True,
-                    "role": "teacher",
-                    "class_id": cid,
-                    "page": "class_home"
-                })
-                st.rerun()
-            else:
-                st.error("Sai mật khẩu.")
-
-    st.markdown("</div>", unsafe_allow_html=True)
     st.stop()
-
 # ==========================================
 # 5. SIDEBAR + NAV
 # ==========================================
