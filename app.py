@@ -1081,13 +1081,12 @@ if (not st.session_state.get("logged_in", False)) or (st.session_state.get("page
                 <div class="brand-wrapper">
                     <img src="{LOGO_URL}" class="logo-img">
                     <div class="text-wrapper">
-                        <h1 class="uni-name">Trường Đại Học<br>Cảnh Sát Nhân Dân</h1>
+                        <h1 class="uni-name">Trường Đại Học Cảnh Sát Nhân Dân</h1>
                         <div class="uni-sub">People's Police University</div>
                     </div>
                 </div>
             </div>
-            
-            <div class="form-section">
+                <div class="form-section">
         """, unsafe_allow_html=True)
 
         # Tabs Streamlit
