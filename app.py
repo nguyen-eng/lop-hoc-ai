@@ -888,12 +888,251 @@ def oe_make_new_id(bank: dict) -> str:
             nums.append(int(m.group(1)))
     nxt = (max(nums) + 1) if nums else 2
     return f"Q{nxt}"
-
 def oe_count_answers(cid: str, qid: str) -> int:
     df = load_data(cid, "openended", suffix=qid)
     return int(len(df)) if df is not None else 0
 flex: 1; /* Chia đều tỷ lệ 1:1 cho 2 tab */
 text-align: center;
+# ==========================================
+# 4. MÀN HÌNH ĐĂNG NHẬP (MCKINSEY PROFESSIONAL STANDARD)
+# ==========================================
+if (not st.session_state.get("logged_in", False)) or (st.session_state.get("page", "login") == "login"):
+    st.session_state["page"] = "login"
+
+    # --- CSS: MCKINSEY STYLE (SẮC NÉT - TỐI GIẢN - TƯƠNG PHẢN CAO) ---
+    st.markdown(f"""
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Playfair+Display:wght@600;800&family=Inter:wght@400;500;600&display=swap');
+
+        /* 1. RESET LAYOUT & NỀN */
+        .stApp {{ background-color: #ffffff; }} /* Nền trắng tuyệt đối theo chuẩn McKinsey */
+        .block-container {{ padding: 0 !important; max-width: 100% !important; }}
+        [data-testid="stHeader"], footer {{ display: none; }}
+
+        /* 2. WRAPPER CĂN GIỮA */
+        .login-wrapper {{
+            display: flex; flex-direction: column;
+            align-items: center; justify-content: center;
+            min-height: 100vh; width: 100%;
+            background-color: #f9fafb; /* Xám rất nhẹ để tách biệt với card trắng */
+            padding: 20px;
+        }}
+
+        /* 3. CARD LOGIN (TỶ LỆ VÀNG) */
+        .login-card {{
+            background: #ffffff;
+            width: 100%;
+            max-width: 720px; /* Đủ rộng để chữ không rớt dòng trên Desktop */
+            padding: 40px;
+            border: 1px solid #e5e7eb; /* Viền mỏng, sắc nét */
+            box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.05); /* Bóng cực nhẹ, tinh tế */
+            border-radius: 0px; /* Vuông vức kiểu McKinsey */
+            margin-bottom: 20px;
+        }}
+
+        /* 4. HEADER: LOGO + TEXT (XỬ LÝ RESPONSIVE TRIỆT ĐỂ) */
+        .brand-header {{
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 25px;
+            margin-bottom: 40px;
+            border-bottom: 2px solid #000; /* Đường kẻ đen quyền lực */
+            padding-bottom: 30px;
+        }}
+
+        .uni-logo {{
+            width: 80px; height: 80px;
+            object-fit: contain;
+            flex-shrink: 0; /* KHÔNG BAO GIỜ ĐƯỢC CO LẠI */
+        }}
+
+        .uni-text {{
+            text-align: left;
+            flex-grow: 1;
+        }}
+
+        .uni-title {{
+            font-family: 'Playfair Display', serif;
+            color: #000000; /* Đen tuyệt đối - Chống mờ */
+            font-size: 28px;
+            font-weight: 800; /* Rất đậm */
+            line-height: 1.1;
+            text-transform: uppercase;
+            letter-spacing: -0.5px;
+        }}
+        
+        .uni-subtitle {{
+            font-family: 'Inter', sans-serif;
+            color: #555;
+            font-size: 14px;
+            font-weight: 500;
+            margin-top: 5px;
+            text-transform: uppercase;
+            letter-spacing: 1px;
+        }}
+
+        /* --- MOBILE FIX (DƯỚI 600PX) --- */
+        @media (max-width: 600px) {{
+            .login-card {{ padding: 25px 20px; }}
+            
+            .brand-header {{
+                flex-direction: column; /* Chuyển thành dọc */
+                gap: 15px;
+                text-align: center;
+            }}
+            
+            .uni-text {{ text-align: center; }}
+            
+            .uni-title {{
+                font-size: 22px; /* Giảm size nhưng vẫn đậm nét */
+            }}
+            
+            /* Sửa lỗi Tabs bị khuất */
+            .stTabs [data-baseweb="tab-list"] {{
+                flex-wrap: nowrap; /* Không xuống dòng */
+                overflow-x: auto; /* Cho phép trượt nếu quá nhỏ */
+            }}
+            .stTabs [data-baseweb="tab"] {{
+                flex: 1; /* Chia đều 50-50 */
+                text-align: center;
+                padding: 10px 5px !important;
+                font-size: 14px !important;
+            }}
+        }}
+
+        /* 5. INPUT FORM (SẠCH - VUÔNG) */
+        .stTextInput input {{
+            background: #fff;
+            border: 1px solid #d1d5db;
+            border-radius: 0px; /* Vuông */
+            padding: 15px !important;
+            font-size: 16px !important;
+            color: #111;
+        }}
+        .stTextInput input:focus {{
+            border-color: #000; /* Focus màu đen */
+            box-shadow: none;
+        }}
+        .stTextInput label {{
+            color: #374151 !important;
+            font-weight: 600;
+            font-size: 14px;
+            font-family: 'Inter', sans-serif;
+        }}
+
+        /* 6. BUTTON (RED ACCENT) */
+        div.stButton > button {{
+            background-color: #b71c1c; /* Đỏ sẫm duy nhất làm điểm nhấn */
+            color: white;
+            border: none;
+            border-radius: 0px;
+            font-family: 'Inter', sans-serif;
+            font-weight: 700 !important;
+            text-transform: uppercase;
+            letter-spacing: 1px;
+            padding: 16px !important;
+            font-size: 15px !important;
+            width: 100%;
+            transition: background 0.2s;
+        }}
+        div.stButton > button:hover {{
+            background-color: #880e0e;
+        }}
+
+        /* 7. TABS (MINIMALIST) */
+        .stTabs [data-baseweb="tab-list"] {{
+            border-bottom: 1px solid #e5e7eb;
+            margin-bottom: 30px;
+            gap: 0;
+        }}
+        .stTabs [data-baseweb="tab"] {{
+            background: transparent;
+            border: none;
+            color: #9ca3af;
+            font-weight: 600;
+            border-bottom: 3px solid transparent;
+            border-radius: 0;
+            padding: 10px 20px;
+        }}
+        .stTabs [aria-selected="true"] {{
+            color: #000 !important;
+            border-bottom: 3px solid #b71c1c !important; /* Chỉ gạch chân đỏ */
+        }}
+
+        /* FOOTER */
+        .mck-footer {{
+            font-family: 'Inter', sans-serif;
+            color: #6b7280;
+            font-size: 12px;
+            text-align: center;
+            margin-top: 10px;
+        }}
+        .mck-footer b {{ color: #111; }}
+    </style>
+    """, unsafe_allow_html=True)
+
+    # --- LAYOUT LOGIC ---
+    st.markdown(f"""
+    <div class="login-wrapper">
+        <div class="login-card">
+            <div class="brand-header">
+                <img src="{LOGO_URL}" class="uni-logo">
+                <div class="uni-text">
+                    <div class="uni-title">TRƯỜNG ĐẠI HỌC<br>CẢNH SÁT NHÂN DÂN</div>
+                    <div class="uni-subtitle">People's Police University</div>
+                </div>
+            </div>
+
+            """, unsafe_allow_html=True)
+
+    # Tabs
+    tab_sv, tab_gv = st.tabs(["CỔNG HỌC VIÊN", "CỔNG GIẢNG VIÊN"])
+
+    with tab_sv:
+        st.write("") # Spacer nhỏ
+        c_class = st.selectbox("Lựa chọn lớp học phần", list(CLASSES.keys()), key="mck_s_class")
+        c_pass = st.text_input("Mã bảo mật lớp", type="password", placeholder="●●●●●●", key="mck_s_pass")
+        
+        st.markdown('<div style="margin: 15px 0; font-size: 13px; color: #555;"><input type="checkbox" checked> Duy trì đăng nhập trên thiết bị này</div>', unsafe_allow_html=True)
+        
+        if st.button("ĐĂNG NHẬP NGAY", key="mck_btn_s"):
+            cid = CLASSES[c_class]
+            if c_pass.strip() == PASSWORDS[cid]:
+                st.session_state.update({"logged_in": True, "role": "student", "class_id": cid, "page": "class_home"})
+                st.rerun()
+            else:
+                st.error("Mã bảo mật không chính xác.")
+
+    with tab_gv:
+        st.write("")
+        gv_class = st.selectbox("Lựa chọn lớp quản lý", list(CLASSES.keys()), key="mck_g_class")
+        t_pass = st.text_input("Mật khẩu Giảng viên", type="password", placeholder="●●●●●●", key="mck_g_pass")
+        
+        st.markdown('<div style="margin: 15px 0; font-size: 13px; color: #555;"><input type="checkbox"> Duy trì đăng nhập</div>', unsafe_allow_html=True)
+        
+        if st.button("TRUY CẬP QUẢN TRỊ", key="mck_btn_g"):
+            if t_pass == "779":
+                cid = CLASSES[gv_class]
+                st.session_state.update({
+                    "logged_in": True,
+                    "role": "teacher",
+                    "class_id": cid,
+                    "page": "class_home"
+                })
+                st.rerun()
+            else:
+                st.error("Sai mật khẩu.")
+
+    # Footer
+    st.markdown("""
+        </div> <div class="mck-footer">
+            Hệ thống Tương tác Lớp học & Giảng dạy Số<br>
+            Phát triển bởi Giảng viên <b>Trần Nguyễn Sĩ Nguyên</b>
+        </div>
+    </div> """, unsafe_allow_html=True)
+
+    st.stop()
 # ==========================================
 # 5. SIDEBAR + NAV
 # ==========================================
