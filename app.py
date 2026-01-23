@@ -669,6 +669,54 @@ def clear_activity(cls, act, suffix: str = ""):
         if os.path.exists(path):
             os.remove(path)
 # =========================
+# LOGIN TOKEN STORE (ANTI-REFRESH LOGOUT)
+# =========================
+TOKEN_STORE_PATH = "login_tokens.json"
+
+def _load_tokens() -> dict:
+    if not os.path.exists(TOKEN_STORE_PATH):
+        return {}
+    try:
+        with open(TOKEN_STORE_PATH, "r", encoding="utf-8") as f:
+            data = json.load(f)
+        return data if isinstance(data, dict) else {}
+    except Exception:
+        return {}
+
+def _save_tokens(tokens: dict):
+    try:
+        with data_lock:
+            with open(TOKEN_STORE_PATH, "w", encoding="utf-8") as f:
+                json.dump(tokens, f, ensure_ascii=False, indent=2)
+    except Exception:
+        pass
+
+def issue_login_token(role: str, cid: str, ttl_hours: int = 12) -> str:
+    tok = str(uuid.uuid4())
+    exp = time.time() + ttl_hours * 3600
+    tokens = _load_tokens()
+    tokens[tok] = {"role": role, "class_id": cid, "exp": exp}
+    _save_tokens(tokens)
+    return tok
+
+def validate_login_token(tok: str) -> dict | None:
+    tok = str(tok or "").strip()
+    if not tok:
+        return None
+    tokens = _load_tokens()
+    info = tokens.get(tok)
+    if not info:
+        return None
+    try:
+        if float(info.get("exp", 0)) < time.time():
+            # hết hạn thì xóa
+            tokens.pop(tok, None)
+            _save_tokens(tokens)
+            return None
+    except Exception:
+        return None
+    return info
+# =========================
 # POLL: 1 DEVICE = 1 VOTE
 # =========================
 def poll_vote_lock_path(cid: str) -> str:
@@ -709,7 +757,33 @@ def poll_mark_voted(cid: str, device_id: str):
 def reset_to_login():
     st.session_state.clear()
     st.rerun()
+# =========================
+# QUERY PARAM HELPERS (GLOBAL)
+# =========================
+def qp_get(key: str, default: str = "") -> str:
+    try:
+        v = st.query_params.get(key, None)
+        if v is None:
+            return default
+        if isinstance(v, list):
+            return v[0] if v else default
+        return str(v)
+    except Exception:
+        q = st.experimental_get_query_params()
+        return q.get(key, [default])[0]
 
+def qp_set(**kwargs):
+    try:
+        for k, v in kwargs.items():
+            st.query_params[k] = str(v)
+    except Exception:
+        st.experimental_set_query_params(**{k: str(v) for k, v in kwargs.items()})
+
+def qp_clear():
+    try:
+        st.query_params.clear()
+    except Exception:
+        st.experimental_set_query_params()
 # ==========================================
 # 3. CẤU HÌNH HOẠT ĐỘNG THEO LỚP
 # ==========================================
@@ -991,6 +1065,19 @@ def oe_count_answers(cid: str, qid: str) -> int:
 # ==========================================
 # 4. MÀN HÌNH ĐĂNG NHẬP (MCKINSEY V3 - MOBILE FIX)
 # ==========================================
+# =========================
+# AUTO RESTORE SESSION FROM URL TOKEN (LIKE MENTIMETER)
+# =========================
+if not st.session_state.get("logged_in", False):
+    tok = qp_get("t", "")
+    info = validate_login_token(tok)
+    if info:
+        st.session_state.update({
+            "logged_in": True,
+            "role": info.get("role", ""),
+            "class_id": info.get("class_id", ""),
+            "page": "class_home"
+        })
 if (not st.session_state.get("logged_in", False)) or (st.session_state.get("page", "login") == "login"):
     st.session_state["page"] = "login"
 
@@ -1229,6 +1316,8 @@ if (not st.session_state.get("logged_in", False)) or (st.session_state.get("page
         if st.button("ĐĂNG NHẬP", key="mck_btn_s"):
             cid = CLASSES[c_class]
             if c_pass.strip() == PASSWORDS[cid]:
+                tok = issue_login_token("student", cid, ttl_hours=12)
+                qp_set(t=tok)  # <= điểm mấu chốt: refresh vẫn giữ t
                 st.session_state.update({
                     "logged_in": True,
                     "role": "student",
@@ -1236,6 +1325,8 @@ if (not st.session_state.get("logged_in", False)) or (st.session_state.get("page
                     "page": "class_home"
                 })
                 st.rerun()
+            else:
+                st.error("Mã bảo mật không chính xác.")
             else:
                 st.error("Mã bảo mật không chính xác.")
     
@@ -1257,6 +1348,8 @@ if (not st.session_state.get("logged_in", False)) or (st.session_state.get("page
         if st.button("TRUY CẬP QUẢN TRỊ", key="mck_btn_g"):
             if t_pass == "779":
                 cid = CLASSES[gv_class]
+                tok = issue_login_token("teacher", cid, ttl_hours=12)
+                qp_set(t=tok)
                 st.session_state.update({
                     "logged_in": True,
                     "role": "teacher",
@@ -1264,6 +1357,8 @@ if (not st.session_state.get("logged_in", False)) or (st.session_state.get("page
                     "page": "class_home"
                 })
                 st.rerun()
+            else:
+                st.error("Sai mật khẩu.")
             else:
                 st.error("Sai mật khẩu.")
     st.markdown("""
@@ -1323,6 +1418,7 @@ with st.sidebar:
 
     st.markdown("---")
     if st.button("↩️ Quay lại đăng nhập", key="nav_logout"):
+        qp_clear()
         reset_to_login()
 
 # ==========================================
@@ -1891,7 +1987,8 @@ Trả lời theo cấu trúc:
         with c2:
             tcol1, tcol2, tcol3 = st.columns([2, 2, 2])
             with tcol1:
-                live = st.toggle("🔴 Live update (1.5s)", value=True, key="wc_live_toggle")
+                is_mobile = (qp_get("m", "0") == "1")
+                live = st.toggle("🔴 Live update (1.5s)", value=(False if is_mobile else True), key="wc_live_toggle")
             with tcol2:
                 if st.button("🖥 Fullscreen Wordcloud", key="wc_btn_full"):
                     _set_qp(wcfs="1", wcq=active_qid)
