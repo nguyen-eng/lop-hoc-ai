@@ -1318,18 +1318,17 @@ if (not st.session_state.get("logged_in", False)) or (st.session_state.get("page
             if c_pass.strip() == PASSWORDS[cid]:
                 tok = issue_login_token("student", cid, ttl_hours=12)
                 qp_set(t=tok)  # <= điểm mấu chốt: refresh vẫn giữ t
-                st.session_state.update({
+                st.session_state.update({{
                     "logged_in": True,
                     "role": "student",
                     "class_id": cid,
                     "page": "class_home"
-                })
+                }})
                 st.rerun()
             else:
                 st.error("Mã bảo mật không chính xác.")
             else:
                 st.error("Mã bảo mật không chính xác.")
-    
     else:
         gv_class = st.selectbox("Lớp quản lý", list(CLASSES.keys()), key="mck_g_class")
         t_pass = st.text_input(
