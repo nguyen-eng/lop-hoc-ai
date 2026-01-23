@@ -1061,6 +1061,7 @@ if (not st.session_state.get("logged_in", False)) or (st.session_state.get("page
     """, unsafe_allow_html=True)
 
     # --- LAYOUT HTML ---
+    # LƯU Ý: Dùng 3 dấu ngoặc kép (""") để bao quanh HTML vì trong chữ People's có dấu nháy đơn
     st.markdown(f"""
     <div class="login-wrapper">
         <div class="login-card">
