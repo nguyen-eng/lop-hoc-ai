@@ -280,7 +280,20 @@ st.markdown(f"""
     }}
 
     /* Ẩn header/footer mặc định */
-    header {{visibility: hidden;}} footer {{visibility: hidden;}}
+    header {{
+    visibility: hidden;
+    height: 0px !important;
+}}
+    /* XÓA KHOẢNG TRỐNG ĐẦU TRANG */
+    .block-container {{
+        padding-top: 0rem !important;
+    }}
+    /* XÓA CONTAINER RỖNG ĐẦU TIÊN (HAY GÂY VỆT TRẮNG) */
+    .block-container > div:first-child {{
+        margin-top: 0 !important;
+        padding-top: 0 !important;
+    }}
+    footer {{visibility: hidden;}}
 
     /* =========================
        STREAMLIT NATIVE TEXT OVERRIDES
