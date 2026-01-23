@@ -2091,7 +2091,7 @@ Trả lời theo cấu trúc:
                 else:
                     st.info("Chưa có bình chọn nào.")
 
-    # ------------------------------------------
+# ------------------------------------------
     # 3) OPEN ENDED
     # ------------------------------------------
     elif act == "openended":
@@ -2103,12 +2103,14 @@ Trả lời theo cấu trúc:
 
         # dữ liệu theo từng câu hỏi
         df_active = load_data(cid, "openended", suffix=active_qid)
-        # ---- helper query params (đã có trong render_activity): _get_qp/_set_qp/_clear_qp ----
-        is_oe_fs = (_get_qp("oefs", "0") == "1")
+        
+        # ---- helper query params ----
         is_oe_fs = (_get_qp("oefs", "0") == "1")
         fs_oe_qid = _get_qp("oeq", active_qid) or active_qid
+        
         if is_oe_fs:
             # ✅ Fullscreen page 16:9 (ổn định, không dùng dialog)
+            # CHÚ Ý: Đảm bảo st.markdown bao bọc toàn bộ CSS bằng f""" ... """
             st.markdown(f"""
             <style>
               header, footer {{visibility:hidden;}}
@@ -2210,7 +2212,7 @@ Trả lời theo cấu trúc:
                             res = model.generate_content(payload)
                             st.info(res.text)
         
-            return
+            return # KẾT THÚC CHẾ ĐỘ FULLSCREEN, RETURN ĐỂ KHÔNG CHẠY CODE GIAO DIỆN THƯỜNG
 
         c1, c2 = st.columns([1, 2])
 
