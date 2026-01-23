@@ -580,68 +580,68 @@ st.markdown(f"""
     font-size: 14px !important;
   }
 }
-/* =========================
-   MOBILE OVERRIDES (<= 600px)
-   Mục tiêu: dễ thao tác, không cần zoom, không gây reload
-   ========================= */
-@media (max-width: 600px){
-  html { font-size: 16px !important; }
-
-  html, body, [class*="css"]{
-    font-size: 16px !important;
-    line-height: 1.35 !important;
-  }
-
-  /* Giảm padding khung chính để khỏi “phình” */
-  .block-container{
-    padding-left: 0.6rem !important;
-    padding-right: 0.6rem !important;
-    padding-top: 0.6rem !important;
-    padding-bottom: 0.6rem !important;
-  }
-
-  /* Text/label tổng quát */
-  label, .stMarkdown, .stText, .stCaption, p, span, div{
-    font-size: 16px !important;
-  }
-
-  /* Inputs */
-  .stTextInput input, .stTextArea textarea{
-    font-size: 16px !important;
-    padding: 12px 12px !important;
-    border-radius: 12px !important;
-  }
-
-  /* Select */
-  [data-baseweb="select"] *{
-    font-size: 16px !important;
-  }
-
-  /* Tabs */
-  button[data-baseweb="tab"]{
-    font-size: 16px !important;
-    padding: 10px 12px !important;
-  }
-
-  /* Buttons */
-  div.stButton > button{
-    font-size: 16px !important;
-    padding: 12px 12px !important;
-    border-radius: 14px !important;
-    box-shadow: none !important; /* mobile nhẹ, tránh giật */
-  }
-
-  /* Note cards (OpenEnded) */
-  .note-card, .note-card *{
-    font-size: 16px !important;
-    line-height: 1.35 !important;
-  }
-
-  /* Dataframe */
-  .stDataFrame, .stDataFrame *{
-    font-size: 14px !important;
-  }
-}
+    /* =========================
+       MOBILE OVERRIDES (<= 600px)
+       Mục tiêu: dễ thao tác, không cần zoom, không gây reload
+       ========================= */
+    @media (max-width: 600px){
+      html { font-size: 16px !important; }
+    
+      html, body, [class*="css"]{
+        font-size: 16px !important;
+        line-height: 1.35 !important;
+      }
+    
+      /* Giảm padding khung chính để khỏi “phình” */
+      .block-container{
+        padding-left: 0.6rem !important;
+        padding-right: 0.6rem !important;
+        padding-top: 0.6rem !important;
+        padding-bottom: 0.6rem !important;
+      }
+    
+      /* Text/label tổng quát */
+      label, .stMarkdown, .stText, .stCaption, p, span, div{
+        font-size: 16px !important;
+      }
+    
+      /* Inputs */
+      .stTextInput input, .stTextArea textarea{
+        font-size: 16px !important;
+        padding: 12px 12px !important;
+        border-radius: 12px !important;
+      }
+    
+      /* Select */
+      [data-baseweb="select"] *{
+        font-size: 16px !important;
+      }
+    
+      /* Tabs */
+      button[data-baseweb="tab"]{
+        font-size: 16px !important;
+        padding: 10px 12px !important;
+      }
+    
+      /* Buttons */
+      div.stButton > button{
+        font-size: 16px !important;
+        padding: 12px 12px !important;
+        border-radius: 14px !important;
+        box-shadow: none !important; /* mobile nhẹ, tránh giật */
+      }
+    
+      /* Note cards (OpenEnded) */
+      .note-card, .note-card *{
+        font-size: 16px !important;
+        line-height: 1.35 !important;
+      }
+    
+      /* Dataframe */
+      .stDataFrame, .stDataFrame *{
+        font-size: 14px !important;
+      }
+    }
 </style>
 """, unsafe_allow_html=True)
 
