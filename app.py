@@ -891,6 +891,7 @@ def oe_make_new_id(bank: dict) -> str:
 def oe_count_answers(cid: str, qid: str) -> int:
     df = load_data(cid, "openended", suffix=qid)
     return int(len(df)) if df is not None else 0
+
 # ==========================================
 # 4. MÀN HÌNH ĐĂNG NHẬP (MCKINSEY HIGH CONTRAST - FIXED)
 # ==========================================
@@ -933,6 +934,9 @@ if (not st.session_state.get("logged_in", False)) or (st.session_state.get("page
         .brand-header {{
             text-align: center; /* Căn giữa toàn bộ */
             margin-bottom: 40px;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
         }}
 
         .uni-logo {{
@@ -944,16 +948,17 @@ if (not st.session_state.get("logged_in", False)) or (st.session_state.get("page
 
         .uni-titles {{
             display: flex; flex-direction: column; gap: 8px;
+            width: 100%;
         }}
 
         /* Tên Tiếng Việt: Playfair Display, Đen, Đậm, KHÔNG RỚT DÒNG */
         .title-vi {{
             font-family: 'Playfair Display', serif;
             color: #000000; /* Đen tuyệt đối */
-            font-size: 32px; /* Chữ to */
+            font-size: 30px; /* Chữ to */
             font-weight: 900;
             text-transform: uppercase;
-            line-height: 1.1;
+            line-height: 1.2;
             letter-spacing: 0.5px;
             white-space: nowrap; /* BẮT BUỘC 1 HÀNG */
         }}
@@ -969,12 +974,12 @@ if (not st.session_state.get("logged_in", False)) or (st.session_state.get("page
             white-space: nowrap; /* BẮT BUỘC 1 HÀNG */
         }}
 
-        /* RESPONSIVE: Khi màn hình quá nhỏ, tự động giảm size chữ để vẫn giữ 1 hàng */
+        /* RESPONSIVE: Khi màn hình quá nhỏ (điện thoại), tự động giảm size chữ để vẫn giữ 1 hàng */
         @media (max-width: 600px) {{
             .login-card {{ padding: 30px 20px; }}
             .uni-logo {{ width: 110px; height: 110px; }}
-            .title-vi {{ font-size: 5vw; }} /* Co giãn theo chiều ngang màn hình */
-            .title-en {{ font-size: 3.5vw; }}
+            .title-vi {{ font-size: 4.5vw; }} /* Co giãn theo chiều ngang màn hình */
+            .title-en {{ font-size: 3.2vw; }}
         }}
 
         /* 5. FORM STYLE (MCKINSEY) */
@@ -1121,7 +1126,9 @@ if (not st.session_state.get("logged_in", False)) or (st.session_state.get("page
                 Hệ thống Tương tác Lớp học & Giảng dạy Số<br>
                 Phát triển bởi Giảng viên <b>Trần Nguyễn Sĩ Nguyên</b>
             </div>
-        </div> </div> """, unsafe_allow_html=True)
+        </div> 
+    </div> 
+    """, unsafe_allow_html=True)
 
     st.stop()
 # ==========================================
