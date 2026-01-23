@@ -1343,7 +1343,9 @@ if (not st.session_state.get("logged_in", False)) or (st.session_state.get("page
         )
     
         if st.button("TRUY CẬP QUẢN TRỊ", key="mck_btn_g"):
-            if t_pass == "779":
+            if not t_pass.strip():
+                st.error("Vui lòng nhập mật khẩu giảng viên.")
+            elif t_pass == "779":
                 cid = CLASSES[gv_class]
                 tok = issue_login_token("teacher", cid, ttl_hours=12)
                 qp_set(t=tok)
@@ -1354,8 +1356,6 @@ if (not st.session_state.get("logged_in", False)) or (st.session_state.get("page
                     "page": "class_home"
                 })
                 st.rerun()
-            else:
-                st.error("Sai mật khẩu.")
             else:
                 st.error("Sai mật khẩu.")
     st.markdown("""
