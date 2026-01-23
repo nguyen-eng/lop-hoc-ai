@@ -1040,7 +1040,7 @@ if (not st.session_state.get("logged_in", False)) or (st.session_state.get("page
         st.markdown(f"""
         <div class="brand-container">
             <img src="{LOGO_URL}" class="brand-logo">
-            <div class="uni-vn">TRƯỜNG ĐẠI HỌC<br>CẢNH SÁT NHÂN DÂN</div>
+            <div class="uni-vn">TRƯỜNG ĐẠI HỌC CẢNH SÁT NHÂN DÂN</div>
             <div class="uni-en">People's Police University</div>
         </div>
         """, unsafe_allow_html=True)
