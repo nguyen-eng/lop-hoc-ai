@@ -522,7 +522,7 @@ st.markdown(f"""
        MOBILE OVERRIDES (<= 600px)
        Mục tiêu: dễ thao tác, không cần zoom, không gây reload
        ========================= */
-    @media (max-width: 600px){
+    @media (max-width: 600px){{
       html {{ font-size: 16px !important; }}
       html, body, [class*="css"]{{
         font-size: 16px !important;
@@ -530,7 +530,7 @@ st.markdown(f"""
       }}
     
       /* Giảm padding khung chính để khỏi “phình” */
-      .block-container{
+      .block-container{{
         padding-left: 0.6rem !important;
         padding-right: 0.6rem !important;
         padding-top: 0.6rem !important;
@@ -555,7 +555,7 @@ st.markdown(f"""
       }}
     
       /* Tabs */
-      button[data-baseweb="tab"]{
+      button[data-baseweb="tab"]{{
         font-size: 16px !important;
         padding: 10px 12px !important;
       }}
