@@ -241,38 +241,6 @@ st.set_page_config(
     layout="wide",
     initial_sidebar_state="collapsed"
 )
-# --- DÁN ĐOẠN NÀY VÀO DÒNG 244 ---
-st.markdown("""
-    <style>
-        /* Đổi màu nền chính sang màu tối chuyên nghiệp */
-        .stApp {
-            background-color: #0f172a !important;
-            color: #f1f5f9 !important;
-        }
-
-        /* Tùy chỉnh Sidebar */
-        [data-testid="stSidebar"] {
-            background-color: #1e293b !important;
-        }
-
-        /* Làm các nút bấm đẹp hơn (bo góc, đổi màu) */
-        div.stButton > button {
-            background-color: #006a4e !important; /* Dùng màu PRIMARY_COLOR của bạn */
-            color: white !important;
-            border-radius: 12px !important;
-            border: none !important;
-            height: 3em !important;
-            font-weight: 600 !important;
-        }
-        
-        /* Hiệu ứng khi di chuột qua nút */
-        div.stButton > button:hover {
-            border: 1px solid #006a4e !important;
-            color: #006a4e !important;
-            background-color: white !important;
-        }
-    </style>
-    """, unsafe_allow_html=True)
 # --- TÀI NGUYÊN ---
 LOGO_URL = "https://drive.google.com/thumbnail?id=1PsUr01oeleJkW2JB1gqnID9WJNsTMFGW&sz=w1000"
 MAP_IMAGE = "https://upload.wikimedia.org/wikipedia/commons/thumb/e/e4/Blank_map_of_Vietnam.svg/858px-Blank_map_of_Vietnam.svg.png"
