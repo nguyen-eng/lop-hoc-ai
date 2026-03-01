@@ -241,6 +241,44 @@ st.set_page_config(
     layout="wide",
     initial_sidebar_state="collapsed"
 )
+ st.markdown("""
+    <style>
+    /* === Hide Streamlit chrome (robust across versions) === */
+    
+    /* 1) Header area */
+    header,
+    header[data-testid="stHeader"],
+    [data-testid="stHeader"],
+    .stApp > header {
+      display: none !important;
+      visibility: hidden !important;
+      height: 0 !important;
+    }
+    
+    /* 2) Footer */
+    footer,
+    footer[data-testid="stFooter"],
+    [data-testid="stFooter"] {
+      display: none !important;
+      visibility: hidden !important;
+      height: 0 !important;
+    }
+    
+    /* 3) Toolbar / decoration / menu button (hay thay đổi theo version) */
+    [data-testid="stToolbar"],
+    [data-testid="stDecoration"],
+    [data-testid="stStatusWidget"],
+    [data-testid="stAppViewContainer"] > .stAppToolbar,
+    #MainMenu {
+      display: none !important;
+    }
+    
+    /* 4) Remove top padding/blank space caused by hidden header */
+    .block-container {
+      padding-top: 0rem !important;
+    }
+    </style>
+    """, unsafe_allow_html=True)
 # --- TÀI NGUYÊN ---
 LOGO_URL = "https://drive.google.com/thumbnail?id=1PsUr01oeleJkW2JB1gqnID9WJNsTMFGW&sz=w1000"
 MAP_IMAGE = "https://upload.wikimedia.org/wikipedia/commons/thumb/e/e4/Blank_map_of_Vietnam.svg/858px-Blank_map_of_Vietnam.svg.png"
@@ -1075,8 +1113,11 @@ def oe_count_answers(cid: str, qid: str) -> int:
     df = load_data(cid, "openended", suffix=qid)
     return int(len(df)) if df is not None else 0
 # ==========================================
-# 4. MÀN HÌNH ĐĂNG NHẬP (TỐI ƯU MOBILE & ĐA NỀN TẢNG)
+# 4. MÀN HÌNH ĐĂNG NHẬP (MCKINSEY V3 - MOBILE FIX)
 # ==========================================
+# =========================
+# AUTO RESTORE SESSION FROM URL TOKEN (LIKE MENTIMETER)
+# =========================
 if not st.session_state.get("logged_in", False):
     tok = qp_get("t", "")
     info = validate_login_token(tok)
@@ -1087,7 +1128,6 @@ if not st.session_state.get("logged_in", False):
             "class_id": info.get("class_id", ""),
             "page": "class_home"
         })
-
 if (not st.session_state.get("logged_in", False)) or (st.session_state.get("page", "login") == "login"):
     st.session_state["page"] = "login"
 
@@ -1095,160 +1135,289 @@ if (not st.session_state.get("logged_in", False)) or (st.session_state.get("page
     <style>
         @import url('https://fonts.googleapis.com/css2?family=Playfair+Display:wght@700;900&family=Inter:wght@400;600;700&display=swap');
 
-        /* Khung nền tổng thể */
-        .stApp {{ background-color: #f8fafc; }}
-        
-        /* Xóa khoảng trắng và vệt lỗi đầu trang */
-        [data-testid="stHeader"], footer {{ display: none !important; }}
+        /* ---- Global reset chống tràn ngang trên mobile ---- */
+        html, body, .stApp {{
+            background-color: #f2f4f8;
+            overflow-x: hidden !important;
+        }}
         .block-container {{
-            padding-top: 2rem !important;
-            max-width: 550px !important; /* Độ rộng tối ưu cho form đăng nhập */
+            padding-top: 5vh !important;
+            max-width: 1100px !important;   /* desktop vừa đẹp */
+            padding-left: 16px !important;  /* tránh sát mép */
+            padding-right: 16px !important;
         }}
+        [data-testid="stHeader"], footer {{ display: none; }}
 
-        /* Card đăng nhập */
+        /* ---- Wrapper tự quản (không phụ thuộc column nth-of-type) ---- */
+        .login-shell {{
+            width: 100%;
+            display: flex;
+            justify-content: center;
+        }}
         .login-card {{
+            width: 100%;
+            max-width: 560px;
             background: #ffffff;
-            padding: 40px 30px;
-            border-radius: 12px;
-            box-shadow: 0 20px 25px -5px rgb(0 0 0 / 0.1);
-            border: 1px solid #e2e8f0;
+            padding: 50px 40px;
+            border-radius: 0px;
+            box-shadow: 0 15px 35px rgba(0,0,0,0.08);
             border-top: 6px solid #b71c1c;
-            text-align: center;
+            box-sizing: border-box;
         }}
 
-        /* Logo và Tiêu đề */
-        .brand-logo {{ width: 120px; margin-bottom: 20px; }}
+        /* ---- Brand ---- */
+        .brand-container {{
+            text-align: center;
+            margin-bottom: 34px;
+        }}
+        .brand-logo {{
+            width: 130px;
+            height: auto;
+            margin-bottom: 18px;
+        }}
         .uni-vn {{
             font-family: 'Playfair Display', serif;
-            color: #111827;
-            font-size: 22px;
+            color: #111111;
+            font-size: 26px;
             font-weight: 900;
-            line-height: 1.3;
-            margin-bottom: 5px;
+            text-transform: uppercase;
+            line-height: 1.25;
+            margin: 0 0 6px 0;
+
+            /* chống “rớt chữ” + chống tràn ngang */
+            word-break: break-word;
+            overflow-wrap: anywhere;
         }}
         .uni-en {{
             font-family: 'Inter', sans-serif;
-            color: #64748b;
-            font-size: 13px;
-            font-weight: 600;
-            letter-spacing: 0.5px;
-            margin-bottom: 25px;
+            color: #555555;
+            font-size: 14px;
+            font-weight: 700;
             text-transform: uppercase;
+            letter-spacing: 1px;
+            margin: 0;
         }}
 
-        /* Tùy biến nút chọn Học viên/Giảng viên (Fix lỗi mất màu chữ) */
-        div[role="radiogroup"] {{
-            display: flex;
-            justify-content: center;
-            gap: 10px;
-            margin-bottom: 25px !important;
+        /* ---- Tabs (streamlit) ---- */
+        .stTabs [data-baseweb="tab-list"] {{
+            gap: 0px;
+            margin-bottom: 22px;
+            border-bottom: 2px solid #eeeeee;
+
+            /* quan trọng: không cho tab-list tạo overflow ngang */
+            flex-wrap: nowrap;
+            overflow-x: hidden;
         }}
-        div[role="radiogroup"] label {{
-            background: #f1f5f9 !important;
-            border: 1px solid #e2e8f0 !important;
-            padding: 8px 20px !important;
-            border-radius: 50px !important;
-            color: #475569 !important; /* Màu chữ mặc định (Xám đậm) - Luôn thấy rõ */
-            font-weight: 700 !important;
-            transition: 0.3s;
+        .stTabs [data-baseweb="tab"] {{
+            flex: 1;
+            text-align: center;
+            padding: 14px 6px;
+            background: white;
+            border: none;
+            color: #888;
+            font-family: 'Inter', sans-serif;
+            font-weight: 700;
+            font-size: 14px;
+            min-width: 0; /* tránh tab tự kéo rộng */
         }}
-        div[role="radiogroup"] label:has(input:checked) {{
-            background: #b71c1c !important;
-            color: white !important; /* Chữ trắng khi được chọn */
-            border-color: #b71c1c !important;
-            box-shadow: 0 4px 6px -1px rgb(183 28 28 / 0.3);
+        .stTabs [aria-selected="true"] {{
+            color: #b71c1c !important;
+            border-bottom: 4px solid #b71c1c !important;
         }}
 
-        /* Input và Button */
+        /* ---- Inputs / Select ---- */
+        .stTextInput label, .stSelectbox label {{
+            font-family: 'Inter', sans-serif;
+            font-size: 14px;
+            color: #333;
+            font-weight: 700;
+        }}
         .stTextInput input {{
-            border-radius: 8px !important;
-            padding: 12px !important;
+            border-radius: 0px;
+            border: 1px solid #ccc;
+            padding: 14px 14px;
+            font-size: 16px;
+            color: #000;
+            background: #fff;
+            width: 100%;
+            box-sizing: border-box;
         }}
+        .stTextInput input:focus {{
+            border-color: #000;
+            box-shadow: none;
+        }}
+
+        /* ---- Buttons ---- */
         div.stButton > button {{
             width: 100%;
             background-color: #b71c1c;
             color: white;
-            border-radius: 8px;
-            padding: 15px;
+            border-radius: 0px;
+            font-family: 'Inter', sans-serif;
             font-weight: 800;
+            text-transform: uppercase;
+            padding: 16px;
+            font-size: 15px;
             border: none;
+            margin-top: 18px;
             transition: 0.3s;
         }}
-        div.stButton > button:hover {{ background-color: #8e1616; border: none; }}
-
-        /* Footer */
-        .login-footer {{
-            margin-top: 30px;
-            font-size: 12px;
-            color: #94a3b8;
-            border-top: 1px solid #f1f5f9;
-            padding-top: 15px;
+        div.stButton > button:hover {{
+            background-color: #8a0c1a;
         }}
 
-        /* Responsive cho điện thoại */
+        /* ---- Footer ---- */
+        .login-footer {{
+            margin-top: 34px;
+            padding-top: 18px;
+            border-top: 1px solid #f0f0f0;
+            text-align: center;
+            color: #999;
+            font-size: 12px;
+            font-family: 'Inter', sans-serif;
+        }}
+        .login-footer b {{ color: #555; }}
+
+        /* ---- Mobile: card full width, padding nhỏ lại, font giảm, tuyệt đối không tràn ngang ---- */
         @media (max-width: 600px) {{
-            .block-container {{ padding: 1rem !important; }}
-            .login-card {{ padding: 30px 20px; }}
-            .uni-vn {{ font-size: 19px; }}
+            .block-container {{
+                padding-top: 18px !important;
+                padding-left: 10px !important;
+                padding-right: 10px !important;
+                max-width: 100% !important;
+            }}
+            .login-card {{
+                max-width: 100%;
+                padding: 26px 18px;
+            }}
+            .brand-logo {{
+                width: 110px;
+            }}
+            .uni-vn {{
+                font-size: 20px;
+                letter-spacing: 0.2px;
+            }}
+            .uni-en {{
+                font-size: 12px;
+                letter-spacing: 0.6px;
+            }}
+        }}
+        /* ===== SEGMENTED RADIO (THAY TAB – MOBILE SAFE) ===== */
+        div[role="radiogroup"]{{
+          display:flex;
+          gap:10px;
+          justify-content:center;
+          margin-bottom: 18px;
+        }}
+        div[role="radiogroup"] label{{
+          border: 1px solid #e2e8f0 !important;
+          padding: 10px 14px !important;
+          border-radius: 999px !important;
+          background: #fff !important;
+          font-family: 'Inter', sans-serif !important;
+          font-weight: 800 !important;
+          color: #64748b !important;
+        }}
+        div[role="radiogroup"] label:has(input:checked){{
+          border-color: #b71c1c !important;
+          color: #b71c1c !important;
+          background: rgba(183,28,28,0.06) !important;
         }}
     </style>
     """, unsafe_allow_html=True)
 
-    # Khung bao ngoài
-    st.markdown('<div class="login-card">', unsafe_allow_html=True)
-    
-    # Hiển thị Logo và Tên trường
-    st.markdown(f'''
-        <img src="{LOGO_URL}" class="brand-logo">
-        <div class="uni-vn">TRƯỜNG ĐẠI HỌC CẢNH SÁT NHÂN DÂN</div>
-        <div class="uni-en">People's Police University</div>
-    ''', unsafe_allow_html=True)
+    # ---- Wrapper mở ----
+    st.markdown("<div class='login-shell'><div class='login-card'>", unsafe_allow_html=True)
 
-    # Lựa chọn cổng đăng nhập (Segmented Control)
+    # HEADER
+    st.markdown(f"""
+        <div class="brand-container">
+            <img src="{LOGO_URL}" class="brand-logo">
+            <div class="uni-vn">TRƯỜNG ĐẠI HỌC CẢNH SÁT NHÂN DÂN</div>
+            <div class="uni-en">People's Police University</div>
+        </div>
+    """, unsafe_allow_html=True)
+    # ===== CHỌN CỔNG ĐĂNG NHẬP (MOBILE-FIRST) =====
     portal = st.radio(
-        "Cổng đăng nhập",
+        "Chọn cổng đăng nhập",
         ["Học viên", "Giảng viên"],
         horizontal=True,
         label_visibility="collapsed",
-        key="login_portal"
+        key="portal_mode"
     )
-
+    
+    st.write("")
+    
     if portal == "Học viên":
-        c_class = st.selectbox("Lớp học phần", list(CLASSES.keys()), key="std_class")
-        c_pass = st.text_input("Mã bảo mật lớp", type="password", placeholder="T05-x", key="std_pass")
-        
-        if st.button("ĐĂNG NHẬP HỆ THỐNG", key="btn_std_login"):
+        c_class = st.selectbox("Lớp học phần", list(CLASSES.keys()), key="mck_s_class")
+        c_pass = st.text_input(
+            "Mã bảo mật",
+            type="password",
+            placeholder="Nhập mã lớp...",
+            key="mck_s_pass"
+        )
+    
+        st.markdown(
+            '<div style="margin-top:10px; font-size:13px; font-family:Inter; color:#555;">'
+            '<input type="checkbox" checked style="accent-color:#b71c1c"> Ghi nhớ đăng nhập</div>',
+            unsafe_allow_html=True
+        )
+    
+        if st.button("ĐĂNG NHẬP", key="mck_btn_s"):
             cid = CLASSES[c_class]
             if c_pass.strip() == PASSWORDS[cid]:
-                tok = issue_login_token("student", cid)
-                qp_set(t=tok)
-                st.session_state.update({"logged_in": True, "role": "student", "class_id": cid, "page": "class_home"})
+                tok = issue_login_token("student", cid, ttl_hours=12)
+                qp_set(t=tok)  # giữ token qua refresh
+                st.session_state.update({
+                    "logged_in": True,
+                    "role": "student",
+                    "class_id": cid,
+                    "page": "class_home"
+                })
                 st.rerun()
             else:
-                st.error("Sai mã bảo mật!")
+                st.error("Mã bảo mật không chính xác.")
     else:
-        gv_class = st.selectbox("Lớp quản lý", list(CLASSES.keys()), key="gv_class_sel")
-        t_pass = st.text_input("Mật khẩu giảng viên", type="password", placeholder="***", key="gv_pass")
-        
-        if st.button("TRUY CẬP QUẢN TRỊ", key="btn_gv_login"):
-            if t_pass == "779":
+        gv_class = st.selectbox("Lớp quản lý", list(CLASSES.keys()), key="mck_g_class")
+        t_pass = st.text_input(
+            "Mật khẩu Giảng viên",
+            type="password",
+            placeholder="Nhập mật khẩu...",
+            key="mck_g_pass"
+        )
+    
+        st.markdown(
+            '<div style="margin-top:10px; font-size:13px; font-family:Inter; color:#555;">'
+            '<input type="checkbox" style="accent-color:#b71c1c"> Ghi nhớ đăng nhập</div>',
+            unsafe_allow_html=True
+        )
+    
+        if st.button("TRUY CẬP QUẢN TRỊ", key="mck_btn_g"):
+            if not t_pass.strip():
+                st.error("Vui lòng nhập mật khẩu giảng viên.")
+            elif t_pass == "779":
                 cid = CLASSES[gv_class]
-                tok = issue_login_token("teacher", cid)
+                tok = issue_login_token("teacher", cid, ttl_hours=12)
                 qp_set(t=tok)
-                st.session_state.update({"logged_in": True, "role": "teacher", "class_id": cid, "page": "class_home"})
+                st.session_state.update({
+                    "logged_in": True,
+                    "role": "teacher",
+                    "class_id": cid,
+                    "page": "class_home"
+                })
                 st.rerun()
             else:
-                st.error("Sai mật khẩu quản trị!")
-
-    # Footer bản quyền
-    st.markdown(f'''
+                st.error("Sai mật khẩu.")
+    st.markdown("""
         <div class="login-footer">
-            Hệ thống tương tác lớp học thông minh<br>
-            Phát triển bởi <b>Trần Nguyễn Sĩ Nguyên</b>
+          <div class="f1">Hệ thống tương tác lớp học</div>
+          <div class="f2">Phát triển bởi Giảng viên <b>Trần Nguyễn Sĩ Nguyên</b></div>
         </div>
-    ''', unsafe_allow_html=True)
-    
-    st.markdown('</div>', unsafe_allow_html=True)
+        """, unsafe_allow_html=True)
+
+    # ---- Wrapper đóng ----
+    st.markdown("</div></div>", unsafe_allow_html=True)
+
     st.stop()
 # ==========================================
 # 5. SIDEBAR + NAV
