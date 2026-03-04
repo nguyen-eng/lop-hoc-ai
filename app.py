@@ -103,35 +103,30 @@ div.stButton > button:hover {{ background-color: #00503a; }}
 # 1) AI (Teacher-only)
 #   - Do NOT initialize Gemini for students to reduce load
 # ============================================================
-def get_ai_model():
-    """Lazy init Gemini model (teacher only). Reads key from ENV."""
+def get_ai_client():
+    """Lazy init Gemini client (teacher only). Reads key from ENV (systemd) first."""
     try:
         import os
-        import google.generativeai as genai
+        from google import genai
 
-        # Ưu tiên ENV
         api_key = os.getenv("GEMINI_API_KEY")
 
-        # fallback secrets (chỉ khi chạy local)
+        # fallback secrets (local only)
         if not api_key:
             try:
-                api_key = st.secrets["GEMINI_API_KEY"]
+                import streamlit as st
+                api_key = st.secrets.get("GEMINI_API_KEY")
             except Exception:
                 api_key = None
 
-        if not api_key:
-            print("❌ GEMINI_API_KEY not found")
+        if not api_key or not str(api_key).strip():
+            print("❌ GEMINI_API_KEY not found (env/secrets).")
             return None
 
-        genai.configure(api_key=api_key)
-
-        # Model ổn định nhất
-        model = genai.GenerativeModel("gemini-1.5-flash")
-
-        return model
+        return genai.Client(api_key=str(api_key).strip())
 
     except Exception as e:
-        print("❌ Gemini init error:", e)
+        print("❌ Gemini init error:", repr(e))
         return None
 
 # ============================================================
