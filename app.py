@@ -1317,16 +1317,16 @@ Trả lời theo cấu trúc:
 # 14) ROUTER
 # ============================================================
 if not st.session_state.get("logged_in", False):
-        render_login()
+    render_login()
+else:
+    render_sidebar()
+    page = st.session_state.get("page", "class_home")
+    if page == "class_home":
+        render_class_home()
+    elif page == "dashboard":
+        render_dashboard()
+    elif page == "activity":
+        render_activity()
     else:
-        render_sidebar()
-        page = st.session_state.get("page", "class_home")
-        if page == "class_home":
-            render_class_home()
-        elif page == "dashboard":
-            render_dashboard()
-        elif page == "activity":
-            render_activity()
-        else:
-            st.session_state["page"] = "class_home"
-            st.rerun()
+        st.session_state["page"] = "class_home"
+        st.rerun()
