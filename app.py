@@ -122,7 +122,7 @@ def get_ai_model():
 
         # 2) Model: ưu tiên model ổn định (tránh 2.5 nếu tài khoản chưa được cấp)
         # Bạn có thể đổi sang "gemini-2.0-flash" hoặc "gemini-1.5-flash" tùy nhu cầu.
-        return genai.GenerativeModel("gemini-1.5-flash")
+        return genai.GenerativeModel("gemini-2.5-flash")
 
     except Exception as e:
         print("❌ Gemini init error:", repr(e))
