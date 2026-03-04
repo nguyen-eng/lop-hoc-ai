@@ -104,18 +104,29 @@ div.stButton > button:hover {{ background-color: #00503a; }}
 #   - Do NOT initialize Gemini for students to reduce load
 # ============================================================
 def get_ai_model():
-    """Lazy init Gemini model (teacher only)."""
+    """Lazy init Gemini model (teacher only). Reads key from ENV (systemd)."""
     try:
+        import os
         import google.generativeai as genai
 
-        api_key = st.secrets.get("GEMINI_API_KEY", None)
-        if not api_key:
-            return None
-        genai.configure(api_key=api_key)
-        return genai.GenerativeModel("gemini-2.5-flash")
-    except Exception:
-        return None
+        # 1) Ưu tiên ENV (systemd). Nếu bạn vẫn muốn hỗ trợ secrets khi chạy local, giữ fallback.
+        api_key = os.getenv("GEMINI_API_KEY") or st.secrets.get("GEMINI_API_KEY", None)
 
+        if not api_key or not str(api_key).strip():
+            # Debug tối thiểu: biết chắc là thiếu key
+            # (Nếu bạn không muốn in log, có thể bỏ dòng print)
+            print("❌ GEMINI_API_KEY not found (env/secrets).")
+            return None
+
+        genai.configure(api_key=str(api_key).strip())
+
+        # 2) Model: ưu tiên model ổn định (tránh 2.5 nếu tài khoản chưa được cấp)
+        # Bạn có thể đổi sang "gemini-2.0-flash" hoặc "gemini-1.5-flash" tùy nhu cầu.
+        return genai.GenerativeModel("gemini-1.5-flash")
+
+    except Exception as e:
+        print("❌ Gemini init error:", repr(e))
+        return None
 
 # ============================================================
 # 2) DATA LAYER (CSV append-only + teacher cached reads)
