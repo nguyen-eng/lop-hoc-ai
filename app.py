@@ -133,7 +133,7 @@ def get_ai_client():
         return None, f"Lỗi khởi tạo Gemini: {repr(e)}"
 
 
-def run_gemini_ai(payload: str, model_name: str = "gemini-2.0-flash") -> tuple[str | None, str | None]:
+def run_gemini_ai(payload: str, model_name: str = "gemini-2.5-flash") -> tuple[str | None, str | None]:
     """
     Gọi Gemini bằng SDK google-genai.
     Trả về: (text, error)
