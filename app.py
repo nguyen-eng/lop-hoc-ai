@@ -1116,22 +1116,22 @@ Trả lời theo cấu trúc:
                 save_bank(cid, "oe", bank)
                 st.toast("Đã kích hoạt.")
                 st.rerun()
-with st.expander("🤖 AI phân tích OpenEnded (GV)", expanded=False):
-    client, ai_err = get_ai_client()
+        with st.expander("🤖 AI phân tích OpenEnded (GV)", expanded=False):
+            client, ai_err = get_ai_client()
 
-    if ai_err:
-        st.warning(ai_err)
-    else:
-        prompt = st.text_input(
-            "Yêu cầu phân tích",
-            value="Phân nhóm quan điểm, chỉ ra điểm mạnh/yếu, trích 3 ví dụ tiêu biểu, và đề xuất 3 can thiệp sư phạm.",
-        )
-
-        if st.button("PHÂN TÍCH NGAY", key="oe_ai_run"):
-            if df.empty:
-                st.warning("Chưa có dữ liệu.")
+            if ai_err:
+                st.warning(ai_err)
             else:
-                payload = f"""
+                prompt = st.text_input(
+                    "Yêu cầu phân tích",
+                    value="Phân nhóm quan điểm, chỉ ra điểm mạnh/yếu, trích 3 ví dụ tiêu biểu, và đề xuất 3 can thiệp sư phạm.",
+                )
+
+                if st.button("PHÂN TÍCH NGAY", key="oe_ai_run"):
+                    if df.empty:
+                        st.warning("Chưa có dữ liệu.")
+                    else:
+                        payload = f"""
 Bạn là trợ giảng cho giảng viên.
 
 CHỦ ĐỀ LỚP:
@@ -1149,17 +1149,19 @@ YÊU CẦU:
 Trả lời theo cấu trúc:
 1) Tóm tắt chủ đề nổi bật
 2) Phân loại quan điểm/lập luận
-3) Trích dẫn minh họa (ngắn, nêu tên)
+3) Trích dẫn minh họa ngắn, nêu tên
 4) 3 can thiệp sư phạm
 5) 3 câu hỏi gợi mở
 """
-                with st.spinner("AI đang phân tích..."):
-                    text, err = run_gemini_ai(payload)
-                    
-                if err:
-                    st.error(err)
-                else:
-                    st.info(text)
+
+                        with st.spinner("AI đang phân tích..."):
+                            text, err = run_gemini_ai(payload)
+
+                        if err:
+                            st.error(err)
+                        else:
+                            st.info(text)
+
         return
     # -----------------------------
     # SCALES
