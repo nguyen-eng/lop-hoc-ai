@@ -1116,7 +1116,6 @@ Trả lời theo cấu trúc:
                 save_bank(cid, "oe", bank)
                 st.toast("Đã kích hoạt.")
                 st.rerun()
-
 with st.expander("🤖 AI phân tích OpenEnded (GV)", expanded=False):
     client, ai_err = get_ai_client()
 
@@ -1162,7 +1161,6 @@ Trả lời theo cấu trúc:
                 else:
                     st.info(text)
         return
-
     # -----------------------------
     # SCALES
     # -----------------------------
