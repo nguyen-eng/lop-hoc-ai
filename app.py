@@ -1161,17 +1161,17 @@ Trả lời theo cấu trúc:
                     st.error(err)
                 else:
                     st.info(text)
-            else:
-                prompt = st.text_input(
-                    "Yêu cầu phân tích",
-                    value="Phân nhóm quan điểm, chỉ ra điểm mạnh/yếu, trích 3 ví dụ tiêu biểu, và đề xuất 3 can thiệp sư phạm.",
-                )
-                if st.button("PHÂN TÍCH NGAY", key="oe_ai_run"):
-                    if df.empty:
-                        st.warning("Chưa có dữ liệu.")
-                    else:
-                        with st.spinner("AI đang phân tích..."):
-                            payload = f"""
+                else:
+                    prompt = st.text_input(
+                        "Yêu cầu phân tích",
+                        value="Phân nhóm quan điểm, chỉ ra điểm mạnh/yếu, trích 3 ví dụ tiêu biểu, và đề xuất 3 can thiệp sư phạm.",
+                    )
+                    if st.button("PHÂN TÍCH NGAY", key="oe_ai_run"):
+                        if df.empty:
+                            st.warning("Chưa có dữ liệu.")
+                        else:
+                            with st.spinner("AI đang phân tích..."):
+                                payload = f"""
 Bạn là trợ giảng cho giảng viên.
 
 CHỦ ĐỀ LỚP:
