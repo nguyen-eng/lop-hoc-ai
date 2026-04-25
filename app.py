@@ -943,26 +943,26 @@ def render_activity():
 
         st.caption(f"👥 Lượt gửi: **{total_answers}** • 👤 Người tham gia (unique): **{total_people}** • 🧩 Cụm duy nhất: **{total_unique}**")
 
-        # Teacher: question bank management
-with st.expander("🤖 AI phân tích WordCloud (GV)", expanded=False):
-    client, ai_err = get_ai_client()
+        # Teacher: AI analysis
+        with st.expander("🤖 AI phân tích WordCloud (GV)", expanded=False):
+            client, ai_err = get_ai_client()
 
-    if ai_err:
-        st.warning(ai_err)
-    else:
-        prompt = st.text_area(
-            "Prompt phân tích",
-            value="Rút ra 3–5 insight chính, phân nhóm từ khóa theo chủ đề, chỉ ra 2–3 hiểu lầm có thể có và đề xuất 3 can thiệp sư phạm.",
-            height=120,
-        )
-
-        if st.button("PHÂN TÍCH NGAY", key="wc_ai_run"):
-            if df.empty:
-                st.warning("Chưa có dữ liệu.")
+            if ai_err:
+                st.warning(ai_err)
             else:
-                top_items = sorted(freq.items(), key=lambda x: x[1], reverse=True)[:25]
+                prompt = st.text_area(
+                    "Prompt phân tích",
+                    value="Rút ra 3–5 insight chính, phân nhóm từ khóa theo chủ đề, chỉ ra 2–3 hiểu lầm có thể có và đề xuất 3 can thiệp sư phạm.",
+                    height=120,
+                )
 
-                payload = f"""
+                if st.button("PHÂN TÍCH NGAY", key="wc_ai_run"):
+                    if df.empty:
+                        st.warning("Chưa có dữ liệu.")
+                    else:
+                        top_items = sorted(freq.items(), key=lambda x: x[1], reverse=True)[:25]
+
+                        payload = f"""
 Bạn là trợ giảng cho giảng viên.
 
 CHỦ ĐỀ LỚP:
@@ -988,13 +988,14 @@ Trả lời theo cấu trúc:
 5) 3 câu hỏi gợi mở
 """
 
-                with st.spinner("AI đang phân tích..."):
-                    text, err = run_gemini_ai(payload)
+                        with st.spinner("AI đang phân tích..."):
+                            text, err = run_gemini_ai(payload)
 
-                if err:
-                    st.error(err)
-                else:
-                    st.info(text)
+                        if err:
+                            st.error(err)
+                        else:
+                            st.info(text)
+
         return
     # -----------------------------
     # POLL
