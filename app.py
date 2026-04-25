@@ -103,31 +103,59 @@ div.stButton > button:hover {{ background-color: #00503a; }}
 # 1) AI (Teacher-only)
 #   - Do NOT initialize Gemini for students to reduce load
 # ============================================================
+@st.cache_resource(show_spinner=False)
 def get_ai_client():
-    """Lazy init Gemini client (teacher only). Reads key from ENV (systemd) first."""
+    """
+    Khởi tạo Google Gen AI client.
+    Ưu tiên lấy GEMINI_API_KEY từ biến môi trường, sau đó lấy từ st.secrets.
+    """
     try:
-        import os
         from google import genai
 
         api_key = os.getenv("GEMINI_API_KEY")
 
-        # fallback secrets (local only)
         if not api_key:
             try:
-                import streamlit as st
                 api_key = st.secrets.get("GEMINI_API_KEY")
             except Exception:
                 api_key = None
 
         if not api_key or not str(api_key).strip():
-            print("❌ GEMINI_API_KEY not found (env/secrets).")
-            return None
+            return None, "Chưa cấu hình GEMINI_API_KEY trong ENV hoặc st.secrets."
 
-        return genai.Client(api_key=str(api_key).strip())
+        client = genai.Client(api_key=str(api_key).strip())
+        return client, None
+
+    except ImportError:
+        return None, "Chưa cài thư viện google-genai. Hãy chạy: pip install -U google-genai"
 
     except Exception as e:
-        print("❌ Gemini init error:", repr(e))
-        return None
+        return None, f"Lỗi khởi tạo Gemini: {repr(e)}"
+
+
+def run_gemini_ai(payload: str, model_name: str = "gemini-2.0-flash") -> tuple[str | None, str | None]:
+    """
+    Gọi Gemini bằng SDK google-genai.
+    Trả về: (text, error)
+    """
+    client, err = get_ai_client()
+    if err:
+        return None, err
+
+    try:
+        response = client.models.generate_content(
+            model=model_name,
+            contents=payload,
+        )
+
+        text = getattr(response, "text", None)
+        if not text:
+            return None, "Gemini không trả về nội dung text."
+
+        return text, None
+
+    except Exception as e:
+        return None, f"Lỗi khi gọi Gemini API: {repr(e)}"
 
 # ============================================================
 # 2) DATA LAYER (CSV append-only + teacher cached reads)
@@ -916,52 +944,25 @@ def render_activity():
         st.caption(f"👥 Lượt gửi: **{total_answers}** • 👤 Người tham gia (unique): **{total_people}** • 🧩 Cụm duy nhất: **{total_unique}**")
 
         # Teacher: question bank management
-        with st.expander("🧠 Quản trị câu hỏi WordCloud", expanded=False):
-            st.success(f"Đang kích hoạt: ({qid}) {qtext}")
+with st.expander("🤖 AI phân tích WordCloud (GV)", expanded=False):
+    client, ai_err = get_ai_client()
 
-            with st.form("wc_add_q", clear_on_submit=True):
-                new_q = st.text_area("Thêm câu hỏi mới", height=100)
-                make_active = st.checkbox("Kích hoạt ngay", value=True)
-                if st.form_submit_button("TẠO"):
-                    if not new_q.strip():
-                        st.warning("Vui lòng nhập nội dung.")
-                    else:
-                        now = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-                        new_id = make_new_qid(bank)
-                        bank["questions"].append({"id": new_id, "text": new_q.strip(), "created_at": now, "updated_at": now})
-                        if make_active:
-                            bank["active_id"] = new_id
-                        save_bank(cid, "wc", bank)
-                        st.toast("Đã tạo câu hỏi.")
-                        st.rerun()
+    if ai_err:
+        st.warning(ai_err)
+    else:
+        prompt = st.text_area(
+            "Prompt phân tích",
+            value="Rút ra 3–5 insight chính, phân nhóm từ khóa theo chủ đề, chỉ ra 2–3 hiểu lầm có thể có và đề xuất 3 can thiệp sư phạm.",
+            height=120,
+        )
 
-            labels = [f"{q['id']} — {q['text'][:80]}{'...' if len(q['text'])>80 else ''}" for q in bank["questions"]]
-            pick = st.selectbox("Chọn câu để kích hoạt", labels, index=max(0, next((i for i,l in enumerate(labels) if l.startswith(qid+' —')), 0)))
-            if st.button("KÍCH HOẠT"):
-                new_active = pick.split(" —", 1)[0].strip()
-                bank["active_id"] = new_active
-                save_bank(cid, "wc", bank)
-                st.toast("Đã kích hoạt.")
-                st.rerun()
-
-        # Teacher: AI analysis (optional)
-        with st.expander("🤖 AI phân tích WordCloud (GV)", expanded=False):
-            model = get_ai_model()
-            if model is None:
-                st.warning("Chưa cấu hình GEMINI_API_KEY trong st.secrets.")
+        if st.button("PHÂN TÍCH NGAY", key="wc_ai_run"):
+            if df.empty:
+                st.warning("Chưa có dữ liệu.")
             else:
-                prompt = st.text_area(
-                    "Prompt phân tích",
-                    value="Rút ra 3–5 insight chính, phân nhóm từ khóa theo chủ đề, chỉ ra 2–3 hiểu lầm có thể có và đề xuất 3 can thiệp sư phạm.",
-                    height=120,
-                )
-                if st.button("PHÂN TÍCH NGAY"):
-                    if df.empty:
-                        st.warning("Chưa có dữ liệu.")
-                    else:
-                        top_items = sorted(freq.items(), key=lambda x: x[1], reverse=True)[:25]
-                        with st.spinner("AI đang phân tích..."):
-                            payload = f"""
+                top_items = sorted(freq.items(), key=lambda x: x[1], reverse=True)[:25]
+
+                payload = f"""
 Bạn là trợ giảng cho giảng viên.
 
 CHỦ ĐỀ LỚP:
@@ -986,11 +987,15 @@ Trả lời theo cấu trúc:
 4) 3 can thiệp sư phạm
 5) 3 câu hỏi gợi mở
 """
-                            res = model.generate_content(payload)
-                            st.info(res.text)
 
+                with st.spinner("AI đang phân tích..."):
+                    text, err = run_gemini_ai(payload)
+
+                if err:
+                    st.error(err)
+                else:
+                    st.info(text)
         return
-
     # -----------------------------
     # POLL
     # -----------------------------
@@ -1111,10 +1116,51 @@ Trả lời theo cấu trúc:
                 st.toast("Đã kích hoạt.")
                 st.rerun()
 
-        with st.expander("🤖 AI phân tích OpenEnded (GV)", expanded=False):
-            model = get_ai_model()
-            if model is None:
-                st.warning("Chưa cấu hình GEMINI_API_KEY trong st.secrets.")
+with st.expander("🤖 AI phân tích OpenEnded (GV)", expanded=False):
+    client, ai_err = get_ai_client()
+
+    if ai_err:
+        st.warning(ai_err)
+    else:
+        prompt = st.text_input(
+            "Yêu cầu phân tích",
+            value="Phân nhóm quan điểm, chỉ ra điểm mạnh/yếu, trích 3 ví dụ tiêu biểu, và đề xuất 3 can thiệp sư phạm.",
+        )
+
+        if st.button("PHÂN TÍCH NGAY", key="oe_ai_run"):
+            if df.empty:
+                st.warning("Chưa có dữ liệu.")
+            else:
+                payload = f"""
+Bạn là trợ giảng cho giảng viên.
+
+CHỦ ĐỀ LỚP:
+{CLASS_ACT_CONFIG[cid]['topic']}
+
+CÂU HỎI ({qid}):
+{qtext}
+
+DỮ LIỆU:
+{df.to_string(index=False)}
+
+YÊU CẦU:
+{prompt}
+
+Trả lời theo cấu trúc:
+1) Tóm tắt chủ đề nổi bật
+2) Phân loại quan điểm/lập luận
+3) Trích dẫn minh họa (ngắn, nêu tên)
+4) 3 can thiệp sư phạm
+5) 3 câu hỏi gợi mở
+"""
+
+                with st.spinner("AI đang phân tích..."):
+                    text, err = run_gemini_ai(payload)
+
+                if err:
+                    st.error(err)
+                else:
+                    st.info(text)
             else:
                 prompt = st.text_input(
                     "Yêu cầu phân tích",
