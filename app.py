@@ -1026,30 +1026,38 @@ CHỦ ĐỀ LỚP:
 CÂU HỎI ({qid}):
 {qtext}
 
-TOP 25 CỤM (chuẩn hoá):
-{top_items}
-
-DỮ LIỆU THÔ:
-{df.to_string(index=False)}
+TÓM TẮT DỮ LIỆU:
+- Số lượt gửi: {len(df)}
+- Số người tham gia unique: {df["name"].nunique() if "name" in df.columns else "không rõ"}
+- Top cụm từ: {top_items}
 
 YÊU CẦU:
 {prompt}
 
 Trả lời theo cấu trúc:
-1) Insights (3–5)
+1) Insights chính
 2) Nhóm chủ đề + ví dụ
 3) Hiểu lầm có thể có + cách chỉnh
-4) 3 can thiệp sư phạm
-5) 3 câu hỏi gợi mở
+4) Can thiệp sư phạm
+5) Câu hỏi gợi mở
 """
 
                         with st.spinner("AI đang phân tích..."):
                             text, err = run_gemini_ai(payload)
 
                         if err:
-                            st.error(err)
+                            st.session_state["wc_ai_error"] = err
+                            st.session_state["wc_ai_result"] = ""
                         else:
-                            st.info(text)
+                            st.session_state["wc_ai_result"] = text
+                            st.session_state["wc_ai_error"] = ""
+
+                if st.session_state.get("wc_ai_error"):
+                    st.error(st.session_state["wc_ai_error"])
+
+                if st.session_state.get("wc_ai_result"):
+                    st.markdown("### Kết quả phân tích của AI")
+                    st.markdown(st.session_state["wc_ai_result"])
 
         return
     # -----------------------------
@@ -1186,6 +1194,8 @@ Trả lời theo cấu trúc:
                     if df.empty:
                         st.warning("Chưa có dữ liệu.")
                     else:
+                        sample_df = df.head(80)
+
                         payload = f"""
 Bạn là trợ giảng cho giảng viên.
 
@@ -1195,8 +1205,8 @@ CHỦ ĐỀ LỚP:
 CÂU HỎI ({qid}):
 {qtext}
 
-DỮ LIỆU:
-{df.to_string(index=False)}
+DỮ LIỆU PHẢN HỒI:
+{sample_df.to_string(index=False)}
 
 YÊU CẦU:
 {prompt}
@@ -1204,7 +1214,7 @@ YÊU CẦU:
 Trả lời theo cấu trúc:
 1) Tóm tắt chủ đề nổi bật
 2) Phân loại quan điểm/lập luận
-3) Trích dẫn minh họa ngắn, nêu tên
+3) Trích dẫn minh họa ngắn, nêu tên nếu có
 4) 3 can thiệp sư phạm
 5) 3 câu hỏi gợi mở
 """
@@ -1213,9 +1223,18 @@ Trả lời theo cấu trúc:
                             text, err = run_gemini_ai(payload)
 
                         if err:
-                            st.error(err)
+                            st.session_state["oe_ai_error"] = err
+                            st.session_state["oe_ai_result"] = ""
                         else:
-                            st.info(text)
+                            st.session_state["oe_ai_result"] = text
+                            st.session_state["oe_ai_error"] = ""
+
+                if st.session_state.get("oe_ai_error"):
+                    st.error(st.session_state["oe_ai_error"])
+
+                if st.session_state.get("oe_ai_result"):
+                    st.markdown("### Kết quả phân tích của AI")
+                    st.markdown(st.session_state["oe_ai_result"])
 
         return
     # -----------------------------
