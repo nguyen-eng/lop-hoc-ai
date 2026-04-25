@@ -149,6 +149,61 @@ def run_gemini_ai(payload: str, model_name: str = "gemini-2.5-flash") -> tuple[s
         )
 
         text = getattr(response, "text", None)
+
+        if not text:
+            try:
+                parts = response.candidates[0].content.parts
+                text = "\n".join([p.text for p in parts if hasattr(p, "text") and p.text])
+            except Exception:
+                text = None
+
+        if not text or not str(text).strip():
+            return None, "Gemini đã phản hồi nhưng không có nội dung text để hiển thị."
+
+        return str(text).strip(), None
+
+    except Exception as e:
+        msg = str(e)
+
+        if "API key expired" in msg:
+            return None, (
+                "API key Google AI đã hết hạn. "
+                "Anh cần tạo API key mới tại Google AI Studio, cập nhật GEMINI_API_KEY trong Streamlit Secrets, rồi Reboot app."
+            )
+
+        if "API_KEY_INVALID" in msg or "API key not valid" in msg:
+            return None, (
+                "API key Google AI không hợp lệ hoặc không còn dùng được. "
+                "Anh cần kiểm tra lại GEMINI_API_KEY trong Streamlit Secrets hoặc tạo key mới."
+            )
+
+        if "RESOURCE_EXHAUSTED" in msg or "Quota exceeded" in msg:
+            return None, (
+                "Đã vượt quota Gemini API hoặc model hiện tại không còn quota miễn phí. "
+                "Anh hãy chờ quota reset, đổi model, hoặc bật billing/nâng cấp quota trong Google AI Studio."
+            )
+
+        if "PERMISSION_DENIED" in msg:
+            return None, (
+                "API key chưa có quyền sử dụng Gemini API hoặc dịch vụ Gemini API chưa được bật."
+            )
+
+        return None, f"Lỗi khi gọi Gemini API: {repr(e)}"
+        """
+    Gọi Gemini bằng SDK google-genai.
+    Trả về: (text, error)
+    """
+    client, err = get_ai_client()
+    if err:
+        return None, err
+
+    try:
+        response = client.models.generate_content(
+            model=model_name,
+            contents=payload,
+        )
+
+        text = getattr(response, "text", None)
         if not text:
             return None, "Gemini không trả về nội dung text."
 
