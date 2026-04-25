@@ -153,7 +153,9 @@ def run_gemini_ai(payload: str, model_name: str = "gemini-2.5-flash") -> tuple[s
         if not text:
             try:
                 parts = response.candidates[0].content.parts
-                text = "\n".join([p.text for p in parts if hasattr(p, "text") and p.text])
+                text = "\n".join(
+                    [p.text for p in parts if hasattr(p, "text") and p.text]
+                )
             except Exception:
                 text = None
 
@@ -189,29 +191,6 @@ def run_gemini_ai(payload: str, model_name: str = "gemini-2.5-flash") -> tuple[s
             )
 
         return None, f"Lỗi khi gọi Gemini API: {repr(e)}"
-        """
-    Gọi Gemini bằng SDK google-genai.
-    Trả về: (text, error)
-    """
-    client, err = get_ai_client()
-    if err:
-        return None, err
-
-    try:
-        response = client.models.generate_content(
-            model=model_name,
-            contents=payload,
-        )
-
-        text = getattr(response, "text", None)
-        if not text:
-            return None, "Gemini không trả về nội dung text."
-
-        return text, None
-
-    except Exception as e:
-        return None, f"Lỗi khi gọi Gemini API: {repr(e)}"
-
 # ============================================================
 # 2) DATA LAYER (CSV append-only + teacher cached reads)
 # ============================================================
@@ -998,6 +977,7 @@ def render_activity():
 
         st.caption(f"👥 Lượt gửi: **{total_answers}** • 👤 Người tham gia (unique): **{total_people}** • 🧩 Cụm duy nhất: **{total_unique}**")
 
+        # Teacher: AI analysis
         # Teacher: AI analysis
         with st.expander("🤖 AI phân tích WordCloud (GV)", expanded=False):
             client, ai_err = get_ai_client()
