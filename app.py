@@ -140,7 +140,10 @@ def run_gemini_ai(payload: str, model_name: str = "gemini-2.5-flash-lite") -> tu
     if err:
         return None, err
     try:
-        response = client.models.generate_content(model=model_name, contents=payload)
+        response = client.models.generate_content(
+            model=model_name,
+            contents=payload[:12000],
+        )
         text = getattr(response, "text", None)
         if not text:
             try:
