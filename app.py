@@ -12,6 +12,7 @@ import json
 import uuid
 import time
 import threading
+import copy
 from datetime import datetime
 
 import streamlit as st
@@ -405,6 +406,195 @@ for i in range(1, 11):
         "ranking": {"name": "Ranking", "question": "Sắp xếp ưu tiên (quan trọng nhất lên đầu).", "items": rank_items},
         "pin": {"name": "Pin", "question": pin_q, "image": MAP_IMAGE},
     }
+
+
+# ============================================================
+# 4B) TEACHER-CUSTOMIZABLE ACTIVITY CONFIG
+# ============================================================
+ACT_LABELS = {"wordcloud":"Word Cloud","poll":"Poll","openended":"Open Ended","scales":"Scales","ranking":"Ranking","pin":"Pin"}
+DEFAULT_CLASS_ACT_CONFIG = copy.deepcopy(CLASS_ACT_CONFIG)
+DEFAULT_AI_PROMPTS = {
+    "wordcloud":"Rút ra 3–5 insight chính, phân nhóm từ khóa theo chủ đề, chỉ ra 2–3 hiểu lầm có thể có và đề xuất 3 can thiệp sư phạm.",
+    "openended":"Phân nhóm quan điểm, chỉ ra điểm mạnh/yếu, trích 3 ví dụ tiêu biểu, và đề xuất 3 can thiệp sư phạm.",
+    "poll":"Phân tích phân bố lựa chọn, chỉ ra nhận thức nổi trội, phương án dễ gây nhầm lẫn và đề xuất cách giảng viên xử lý ngay trên lớp.",
+    "scales":"Phân tích mức tự đánh giá của học viên, xác định tiêu chí mạnh/yếu và đề xuất hoạt động củng cố.",
+    "ranking":"Phân tích thứ tự ưu tiên của học viên, nhận diện logic lựa chọn và đề xuất câu hỏi phản biện.",
+    "pin":"Phân tích các vùng/điểm nóng được học viên chọn, nhóm hóa lý do và đề xuất cách khai thác thảo luận.",
+}
+DEFAULT_ZONES = ["Bắc","Trung","Nam","Khu vực đông dân","Khu vực trường học","Khu vực công nghiệp","Khác"]
+
+def activity_config_path(cid: str, act: str) -> str:
+    return f"activity_config_{cid}_{act}.json"
+
+def _normalize_list(items, fallback):
+    if isinstance(items, str):
+        items = [x.strip() for x in items.splitlines() if x.strip()]
+    if not isinstance(items, list):
+        items = []
+    items = [str(x).strip() for x in items if str(x).strip()]
+    return items if items else list(fallback)
+
+def default_activity_config(cid: str, act: str) -> dict:
+    base = copy.deepcopy(DEFAULT_CLASS_ACT_CONFIG[cid][act])
+    base.setdefault("enabled", True)
+    base.setdefault("ai_prompt", DEFAULT_AI_PROMPTS.get(act, DEFAULT_AI_PROMPTS["openended"]))
+    if act == "pin":
+        base.setdefault("zones", DEFAULT_ZONES)
+    return base
+
+def load_activity_config(cid: str, act: str) -> dict:
+    base = default_activity_config(cid, act)
+    path = activity_config_path(cid, act)
+    if os.path.exists(path):
+        try:
+            with open(path, "r", encoding="utf-8") as f:
+                saved = json.load(f)
+            if isinstance(saved, dict):
+                base.update(saved)
+        except Exception:
+            pass
+    base["name"] = ACT_LABELS.get(act, base.get("name", act))
+    base["enabled"] = bool(base.get("enabled", True))
+    base["question"] = str(base.get("question", "")).strip() or default_activity_config(cid, act).get("question", "")
+    base["ai_prompt"] = str(base.get("ai_prompt", DEFAULT_AI_PROMPTS.get(act, ""))).strip()
+    if act == "poll":
+        base["options"] = _normalize_list(base.get("options"), default_activity_config(cid, act).get("options", []))[:12]
+    if act == "scales":
+        base["criteria"] = _normalize_list(base.get("criteria"), default_activity_config(cid, act).get("criteria", []))[:12]
+    if act == "ranking":
+        base["items"] = _normalize_list(base.get("items"), default_activity_config(cid, act).get("items", []))[:12]
+    if act == "pin":
+        base["image"] = str(base.get("image", MAP_IMAGE)).strip() or MAP_IMAGE
+        base["zones"] = _normalize_list(base.get("zones"), DEFAULT_ZONES)[:20]
+    return base
+
+def save_activity_config(cid: str, act: str, cfg: dict):
+    with data_lock:
+        with open(activity_config_path(cid, act), "w", encoding="utf-8") as f:
+            json.dump(cfg, f, ensure_ascii=False, indent=2)
+
+def render_activity_settings(cid: str, act: str, cfg: dict, active_q_text: str | None = None):
+    with st.expander("⚙️ Thiết lập hoạt động (chỉ giảng viên)", expanded=False):
+        enabled = st.toggle("Kích hoạt hoạt động cho học viên", value=bool(cfg.get("enabled", True)), key=f"set_enabled_{act}")
+        question = st.text_area("Câu hỏi / vấn đề đặt ra", value=str(active_q_text or cfg.get("question", "")), height=100, key=f"set_question_{act}")
+        new_cfg = copy.deepcopy(cfg)
+        new_cfg["enabled"] = enabled
+        if act not in ["wordcloud", "openended"]:
+            new_cfg["question"] = question.strip()
+
+        if act == "poll":
+            opts = st.text_area("Các phương án trả lời — mỗi dòng một phương án", value="\n".join(cfg.get("options", [])), height=150, key="poll_opts_editor")
+            new_cfg["options"] = _normalize_list(opts, cfg.get("options", []))[:12]
+        elif act == "scales":
+            criteria = st.text_area("Các tiêu chí thang đo — mỗi dòng một tiêu chí", value="\n".join(cfg.get("criteria", [])), height=150, key="scales_criteria_editor")
+            new_cfg["criteria"] = _normalize_list(criteria, cfg.get("criteria", []))[:12]
+        elif act == "ranking":
+            items = st.text_area("Các mục xếp hạng — mỗi dòng một mục", value="\n".join(cfg.get("items", [])), height=150, key="ranking_items_editor")
+            new_cfg["items"] = _normalize_list(items, cfg.get("items", []))[:12]
+        elif act == "pin":
+            image = st.text_input("Link ảnh/sơ đồ minh họa", value=cfg.get("image", MAP_IMAGE), key="pin_image_editor")
+            zones = st.text_area("Vùng/điểm lựa chọn — mỗi dòng một mục", value="\n".join(cfg.get("zones", DEFAULT_ZONES)), height=150, key="pin_zones_editor")
+            new_cfg["image"] = image.strip() or MAP_IMAGE
+            new_cfg["zones"] = _normalize_list(zones, DEFAULT_ZONES)[:20]
+
+        ai_prompt = st.text_area("Prompt AI mặc định cho giảng viên", value=cfg.get("ai_prompt", DEFAULT_AI_PROMPTS.get(act, "")), height=130, key=f"ai_prompt_editor_{act}")
+        new_cfg["ai_prompt"] = ai_prompt.strip()
+
+        c1, c2 = st.columns(2)
+        with c1:
+            if st.button("💾 Lưu thiết lập", key=f"save_settings_{act}"):
+                save_activity_config(cid, act, new_cfg)
+                st.toast("Đã lưu thiết lập hoạt động.")
+                st.rerun()
+        with c2:
+            if st.button("🧹 Reset dữ liệu hoạt động hiện tại", key=f"reset_settings_{act}"):
+                if act == "wordcloud":
+                    bank = load_bank(cid, "wc", cfg.get("question", ""))
+                    qid = get_active_question(bank, cfg.get("question", ""))["id"]
+                    clear_activity(cid, "wordcloud", suffix=qid)
+                elif act == "openended":
+                    bank = load_bank(cid, "oe", cfg.get("question", ""))
+                    qid = get_active_question(bank, cfg.get("question", ""))["id"]
+                    clear_activity(cid, "openended", suffix=qid)
+                else:
+                    clear_activity(cid, act)
+                st.toast("Đã reset dữ liệu hoạt động.")
+                st.rerun()
+        if act in ["wordcloud", "openended"]:
+            st.caption("Với WordCloud/OpenEnded, dùng ngân hàng câu hỏi bên dưới để tạo nhiều câu và chọn câu đang kích hoạt.")
+
+def render_question_bank_manager(cid: str, kind: str, bank: dict, current_qid: str, act: str):
+    title = "WordCloud" if kind == "wc" else "OpenEnded"
+    with st.expander(f"🧠 Ngân hàng câu hỏi {title}", expanded=False):
+        aq = get_active_question(bank, "")
+        st.success(f"Đang kích hoạt: ({aq.get('id')}) {aq.get('text')}")
+        with st.form(f"{kind}_add_q", clear_on_submit=True):
+            new_q = st.text_area("Thêm câu hỏi/vấn đề mới", height=100, key=f"{kind}_new_q_text")
+            make_active = st.checkbox("Kích hoạt ngay", value=True, key=f"{kind}_make_active")
+            if st.form_submit_button("TẠO"):
+                if not new_q.strip():
+                    st.warning("Vui lòng nhập nội dung.")
+                else:
+                    now = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+                    new_id = make_new_qid(bank)
+                    bank["questions"].append({"id": new_id, "text": new_q.strip(), "created_at": now, "updated_at": now})
+                    if make_active:
+                        bank["active_id"] = new_id
+                    save_bank(cid, kind, bank)
+                    st.toast("Đã tạo câu hỏi.")
+                    st.rerun()
+        labels = [f"{q['id']} — {q['text'][:100]}{'...' if len(q['text'])>100 else ''}" for q in bank["questions"]]
+        idx = max(0, next((i for i, l in enumerate(labels) if l.startswith(current_qid + ' —')), 0))
+        pick = st.selectbox("Chọn câu để kích hoạt", labels, index=idx, key=f"{kind}_activate_pick")
+        if st.button("KÍCH HOẠT", key=f"{kind}_activate_btn"):
+            bank["active_id"] = pick.split(" —", 1)[0].strip()
+            save_bank(cid, kind, bank)
+            st.toast("Đã kích hoạt.")
+            st.rerun()
+        if st.button("CẬP NHẬT NỘI DUNG CÂU ACTIVE TỪ Ô THIẾT LẬP", key=f"{kind}_update_active_btn"):
+            new_text = st.session_state.get(f"set_question_{act}", "").strip()
+            if not new_text:
+                st.warning("Ô câu hỏi/vấn đề đang trống.")
+            else:
+                for q in bank["questions"]:
+                    if q.get("id") == current_qid:
+                        q["text"] = new_text
+                        q["updated_at"] = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+                save_bank(cid, kind, bank)
+                st.toast("Đã cập nhật câu active.")
+                st.rerun()
+
+def render_ai_panel(cid: str, act: str, qtext: str, df: pd.DataFrame, payload_builder):
+    cfg = load_activity_config(cid, act)
+    with st.expander("🤖 AI phân tích câu trả lời học viên (chỉ giảng viên)", expanded=False):
+        client, ai_err = get_ai_client()
+        if ai_err:
+            st.warning(ai_err)
+            return
+        prompt = st.text_area("Prompt truy vấn AI", value=cfg.get("ai_prompt", DEFAULT_AI_PROMPTS.get(act, "")), height=130, key=f"{act}_ai_prompt_runtime")
+        result_key = f"ai_result_{cid}_{act}_{abs(hash(qtext))}"
+        error_key = f"ai_error_{cid}_{act}_{abs(hash(qtext))}"
+        result_box = st.container(border=True)
+        if st.button("PHÂN TÍCH NGAY", key=f"{act}_ai_run"):
+            if df is None or df.empty:
+                st.warning("Chưa có dữ liệu để AI phân tích.")
+            else:
+                with st.spinner("AI đang phân tích..."):
+                    text, err = run_gemini_ai(payload_builder(prompt))
+                if err:
+                    st.session_state[error_key] = err
+                    st.session_state[result_key] = ""
+                else:
+                    st.session_state[result_key] = text
+                    st.session_state[error_key] = ""
+        with result_box:
+            st.markdown("### Kết quả phân tích của AI")
+            if st.session_state.get(error_key):
+                st.error(st.session_state[error_key])
+            elif st.session_state.get(result_key):
+                st.markdown(st.session_state[result_key])
+            else:
+                st.caption("Kết quả AI sẽ hiển thị tại đây sau khi bấm PHÂN TÍCH NGAY.")
 
 # ============================================================
 # 5) QUESTION BANK (Wordcloud + OpenEnded) - teacher full, student sees active only
@@ -802,39 +992,43 @@ def render_sidebar():
 # ============================================================
 def render_class_home():
     cid = st.session_state["class_id"]
-    cfg = CLASS_ACT_CONFIG[cid]
     role = st.session_state["role"]
     cls_txt = next((k for k, v in CLASSES.items() if v == cid), cid)
 
     st.markdown(f"## 📚 Danh mục hoạt động • **{cls_txt}**")
-    st.caption(f"Chủ đề: {cfg['topic']}")
+    st.caption(f"Chủ đề chung: {class_topic(cid)}")
 
     acts = [("wordcloud", "Word Cloud"), ("poll", "Poll"), ("openended", "Open Ended"), ("scales", "Scales"), ("ranking", "Ranking"), ("pin", "Pin")]
     for key, title in acts:
+        acfg = load_activity_config(cid, key)
         box = st.container(border=True)
         with box:
-            st.markdown(f"### {title}")
-            st.caption(cfg[key]["question"])
-            # Only teacher sees counts (avoid disk reads by students)
+            status = "🟢 Đang kích hoạt" if acfg.get("enabled", True) else "⚪ Chưa kích hoạt"
+            st.markdown(f"### {title} • {status}")
+            st.caption(acfg.get("question", ""))
+
             if role == "teacher":
-                # For wc/oe use active Q
                 if key == "wordcloud":
-                    bank = load_bank(cid, "wc", cfg["wordcloud"]["question"])
-                    aq = get_active_question(bank, cfg["wordcloud"]["question"])
+                    bank = load_bank(cid, "wc", acfg.get("question", ""))
+                    aq = get_active_question(bank, acfg.get("question", ""))
                     df = load_data_cached(cid, "wordcloud", suffix=aq["id"])
-                    st.caption(f"Đang kích hoạt: **{aq['id']}** • Lượt gửi (câu active): **{len(df)}** • Tổng câu: **{len(bank['questions'])}**")
+                    st.caption(f"Câu active: **{aq['id']}** • Lượt gửi: **{len(df)}** • Tổng câu: **{len(bank['questions'])}**")
                 elif key == "openended":
-                    bank = load_bank(cid, "oe", cfg["openended"]["question"])
-                    aq = get_active_question(bank, cfg["openended"]["question"])
+                    bank = load_bank(cid, "oe", acfg.get("question", ""))
+                    aq = get_active_question(bank, acfg.get("question", ""))
                     df = load_data_cached(cid, "openended", suffix=aq["id"])
-                    st.caption(f"Đang kích hoạt: **{aq['id']}** • Lượt gửi (câu active): **{len(df)}** • Tổng câu: **{len(bank['questions'])}**")
+                    st.caption(f"Câu active: **{aq['id']}** • Lượt gửi: **{len(df)}** • Tổng câu: **{len(bank['questions'])}**")
                 else:
                     df = load_data_cached(cid, key)
                     st.caption(f"Lượt gửi: **{len(df)}**")
-            if st.button("MỞ", key=f"open_{key}"):
-                st.session_state["current_act"] = key
-                st.session_state["page"] = "activity"
-                st.rerun()
+
+            if role == "teacher" or acfg.get("enabled", True):
+                if st.button("MỞ", key=f"open_{key}"):
+                    st.session_state["current_act"] = key
+                    st.session_state["page"] = "activity"
+                    st.rerun()
+            else:
+                st.caption("Hoạt động chưa mở cho học viên.")
 
 # ============================================================
 # 12) DASHBOARD (Teacher-only)
@@ -845,23 +1039,22 @@ def render_dashboard():
         return
 
     cid = st.session_state["class_id"]
-    cfg = CLASS_ACT_CONFIG[cid]
 
     st.markdown("## 🏠 Dashboard (Giảng viên)")
-    st.caption(f"Chủ đề lớp: {cfg['topic']}")
+    st.caption(f"Chủ đề chung: {class_topic(cid)}")
 
-    # Teacher may want live refresh here
     live = st.toggle("🔴 Live update (1.5s)", value=True)
     if live and st_autorefresh is not None:
         st_autorefresh(interval=1500, key="dash_live")
 
-    # Counts (cached reads)
-    bank_wc = load_bank(cid, "wc", cfg["wordcloud"]["question"])
-    aq_wc = get_active_question(bank_wc, cfg["wordcloud"]["question"])
+    wc_cfg = load_activity_config(cid, "wordcloud")
+    bank_wc = load_bank(cid, "wc", wc_cfg.get("question", ""))
+    aq_wc = get_active_question(bank_wc, wc_cfg.get("question", ""))
     n_wc = len(load_data_cached(cid, "wordcloud", suffix=aq_wc["id"]))
 
-    bank_oe = load_bank(cid, "oe", cfg["openended"]["question"])
-    aq_oe = get_active_question(bank_oe, cfg["openended"]["question"])
+    oe_cfg = load_activity_config(cid, "openended")
+    bank_oe = load_bank(cid, "oe", oe_cfg.get("question", ""))
+    aq_oe = get_active_question(bank_oe, oe_cfg.get("question", ""))
     n_oe = len(load_data_cached(cid, "openended", suffix=aq_oe["id"]))
 
     n_poll = len(load_data_cached(cid, "poll"))
@@ -899,7 +1092,7 @@ def render_activity():
     cid = st.session_state["class_id"]
     role = st.session_state["role"]
     act = st.session_state["current_act"]
-    cfg = CLASS_ACT_CONFIG[cid][act]
+    cfg = load_activity_config(cid, act)
 
     top = st.columns([1, 6])
     with top[0]:
@@ -908,6 +1101,12 @@ def render_activity():
             st.rerun()
     with top[1]:
         st.markdown(f"## {cfg['name']}")
+
+    if role == "teacher":
+        render_activity_settings(cid, act, cfg)
+    elif not cfg.get("enabled", True):
+        st.warning("Hoạt động này hiện chưa được giảng viên kích hoạt.")
+        return
 
     # -----------------------------
     # WORDCLOUD
@@ -977,38 +1176,22 @@ def render_activity():
 
         st.caption(f"👥 Lượt gửi: **{total_answers}** • 👤 Người tham gia (unique): **{total_people}** • 🧩 Cụm duy nhất: **{total_unique}**")
 
-        # Teacher: AI analysis
-        # Teacher: AI analysis
-        with st.expander("🤖 AI phân tích WordCloud (GV)", expanded=False):
-            client, ai_err = get_ai_client()
+        render_question_bank_manager(cid, "wc", bank, qid, "wordcloud")
 
-            if ai_err:
-                st.warning(ai_err)
-            else:
-                prompt = st.text_area(
-                    "Prompt phân tích",
-                    value="Rút ra 3–5 insight chính, phân nhóm từ khóa theo chủ đề, chỉ ra 2–3 hiểu lầm có thể có và đề xuất 3 can thiệp sư phạm.",
-                    height=120,
-                )
-
-                if st.button("PHÂN TÍCH NGAY", key="wc_ai_run"):
-                    if df.empty:
-                        st.warning("Chưa có dữ liệu.")
-                    else:
-                        top_items = sorted(freq.items(), key=lambda x: x[1], reverse=True)[:25]
-
-                        payload = f"""
+        def _wc_payload(prompt):
+            top_items = sorted(freq.items(), key=lambda x: x[1], reverse=True)[:25]
+            return f"""
 Bạn là trợ giảng cho giảng viên.
 
 CHỦ ĐỀ LỚP:
-{CLASS_ACT_CONFIG[cid]['topic']}
+{class_topic(cid)}
 
 CÂU HỎI ({qid}):
 {qtext}
 
 TÓM TẮT DỮ LIỆU:
 - Số lượt gửi: {len(df)}
-- Số người tham gia unique: {df["name"].nunique() if "name" in df.columns else "không rõ"}
+- Số người tham gia unique: {df["Học viên"].nunique() if "Học viên" in df.columns else "không rõ"}
 - Top cụm từ: {top_items}
 
 YÊU CẦU:
@@ -1021,24 +1204,9 @@ Trả lời theo cấu trúc:
 4) Can thiệp sư phạm
 5) Câu hỏi gợi mở
 """
+        render_ai_panel(cid, "wordcloud", qtext, df, _wc_payload)
 
-                        with st.spinner("AI đang phân tích..."):
-                            text, err = run_gemini_ai(payload)
-
-                        if err:
-                            st.session_state["wc_ai_error"] = err
-                            st.session_state["wc_ai_result"] = ""
-                        else:
-                            st.session_state["wc_ai_result"] = text
-                            st.session_state["wc_ai_error"] = ""
-
-                if st.session_state.get("wc_ai_error"):
-                    st.error(st.session_state["wc_ai_error"])
-
-                if st.session_state.get("wc_ai_result"):
-                    st.markdown("### Kết quả phân tích của AI")
-                    st.markdown(st.session_state["wc_ai_result"])
-
+        return
         return
     # -----------------------------
     # POLL
@@ -1084,6 +1252,27 @@ Trả lời theo cấu trúc:
                 st.rerun()
         with c2:
             st.caption("GV có thể reset để làm lượt mới.")
+
+        def _poll_payload(prompt):
+            return f"""
+Bạn là trợ giảng cho giảng viên.
+
+CHỦ ĐỀ LỚP:
+{class_topic(cid)}
+
+CÂU HỎI:
+{cfg.get("question", "")}
+
+PHƯƠNG ÁN:
+{options}
+
+DỮ LIỆU BÌNH CHỌN:
+{df.to_string(index=False)}
+
+YÊU CẦU:
+{prompt}
+"""
+        render_ai_panel(cid, "poll", cfg.get("question", ""), df, _poll_payload)
         return
 
     # -----------------------------
@@ -1133,54 +1322,15 @@ Trả lời theo cấu trúc:
         with c3:
             pass
 
-        with st.expander("🧠 Quản trị câu hỏi OpenEnded", expanded=False):
-            st.success(f"Đang kích hoạt: ({qid}) {qtext}")
-            with st.form("oe_add_q", clear_on_submit=True):
-                new_q = st.text_area("Thêm câu hỏi mới", height=100)
-                make_active = st.checkbox("Kích hoạt ngay", value=True)
-                if st.form_submit_button("TẠO"):
-                    if not new_q.strip():
-                        st.warning("Vui lòng nhập nội dung.")
-                    else:
-                        now = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-                        new_id = make_new_qid(bank)
-                        bank["questions"].append({"id": new_id, "text": new_q.strip(), "created_at": now, "updated_at": now})
-                        if make_active:
-                            bank["active_id"] = new_id
-                        save_bank(cid, "oe", bank)
-                        st.toast("Đã tạo câu hỏi.")
-                        st.rerun()
+        render_question_bank_manager(cid, "oe", bank, qid, "openended")
 
-            labels = [f"{q['id']} — {q['text'][:80]}{'...' if len(q['text'])>80 else ''}" for q in bank["questions"]]
-            pick = st.selectbox("Chọn câu để kích hoạt", labels, index=max(0, next((i for i,l in enumerate(labels) if l.startswith(qid+' —')), 0)))
-            if st.button("KÍCH HOẠT", key="oe_activate_btn"):
-                new_active = pick.split(" —", 1)[0].strip()
-                bank["active_id"] = new_active
-                save_bank(cid, "oe", bank)
-                st.toast("Đã kích hoạt.")
-                st.rerun()
-        with st.expander("🤖 AI phân tích OpenEnded (GV)", expanded=False):
-            client, ai_err = get_ai_client()
-
-            if ai_err:
-                st.warning(ai_err)
-            else:
-                prompt = st.text_input(
-                    "Yêu cầu phân tích",
-                    value="Phân nhóm quan điểm, chỉ ra điểm mạnh/yếu, trích 3 ví dụ tiêu biểu, và đề xuất 3 can thiệp sư phạm.",
-                )
-
-                if st.button("PHÂN TÍCH NGAY", key="oe_ai_run"):
-                    if df.empty:
-                        st.warning("Chưa có dữ liệu.")
-                    else:
-                        sample_df = df.head(80)
-
-                        payload = f"""
+        def _oe_payload(prompt):
+            sample_df = df.head(80)
+            return f"""
 Bạn là trợ giảng cho giảng viên.
 
 CHỦ ĐỀ LỚP:
-{CLASS_ACT_CONFIG[cid]['topic']}
+{class_topic(cid)}
 
 CÂU HỎI ({qid}):
 {qtext}
@@ -1198,24 +1348,9 @@ Trả lời theo cấu trúc:
 4) 3 can thiệp sư phạm
 5) 3 câu hỏi gợi mở
 """
+        render_ai_panel(cid, "openended", qtext, df, _oe_payload)
 
-                        with st.spinner("AI đang phân tích..."):
-                            text, err = run_gemini_ai(payload)
-
-                        if err:
-                            st.session_state["oe_ai_error"] = err
-                            st.session_state["oe_ai_result"] = ""
-                        else:
-                            st.session_state["oe_ai_result"] = text
-                            st.session_state["oe_ai_error"] = ""
-
-                if st.session_state.get("oe_ai_error"):
-                    st.error(st.session_state["oe_ai_error"])
-
-                if st.session_state.get("oe_ai_result"):
-                    st.markdown("### Kết quả phân tích của AI")
-                    st.markdown(st.session_state["oe_ai_result"])
-
+        return
         return
     # -----------------------------
     # SCALES
@@ -1268,6 +1403,27 @@ Trả lời theo cấu trúc:
         if st.button("🧹 Reset Scales"):
             clear_activity(cid, "scales")
             st.rerun()
+
+        def _scales_payload(prompt):
+            return f"""
+Bạn là trợ giảng cho giảng viên.
+
+CHỦ ĐỀ LỚP:
+{class_topic(cid)}
+
+CÂU HỎI:
+{cfg.get("question", "")}
+
+TIÊU CHÍ:
+{criteria}
+
+DỮ LIỆU THANG ĐO:
+{df.to_string(index=False)}
+
+YÊU CẦU:
+{prompt}
+"""
+        render_ai_panel(cid, "scales", cfg.get("question", ""), df, _scales_payload)
         return
 
     # -----------------------------
@@ -1320,6 +1476,27 @@ Trả lời theo cấu trúc:
         if st.button("🧹 Reset Ranking"):
             clear_activity(cid, "ranking")
             st.rerun()
+
+        def _ranking_payload(prompt):
+            return f"""
+Bạn là trợ giảng cho giảng viên.
+
+CHỦ ĐỀ LỚP:
+{class_topic(cid)}
+
+CÂU HỎI:
+{cfg.get("question", "")}
+
+CÁC MỤC XẾP HẠNG:
+{items}
+
+DỮ LIỆU XẾP HẠNG:
+{df.to_string(index=False)}
+
+YÊU CẦU:
+{prompt}
+"""
+        render_ai_panel(cid, "ranking", cfg.get("question", ""), df, _ranking_payload)
         return
 
     # -----------------------------
@@ -1329,9 +1506,9 @@ Trả lời theo cấu trúc:
     # -----------------------------
     if act == "pin":
         st.info(f"**{cfg['question']}**")
-        st.image(cfg["image"], caption="Sơ đồ minh họa (tượng trưng)", use_container_width=True)
+        st.image(cfg.get("image", MAP_IMAGE), caption="Sơ đồ minh họa (tượng trưng)", use_container_width=True)
 
-        zones = ["Bắc", "Trung", "Nam", "Khu vực đông dân", "Khu vực trường học", "Khu vực công nghiệp", "Khác"]
+        zones = cfg.get("zones", DEFAULT_ZONES)
 
         if role == "student":
             with st.form("pin_student", clear_on_submit=True):
@@ -1376,6 +1553,27 @@ Trả lời theo cấu trúc:
         if st.button("🧹 Reset Pin"):
             clear_activity(cid, "pin")
             st.rerun()
+
+        def _pin_payload(prompt):
+            return f"""
+Bạn là trợ giảng cho giảng viên.
+
+CHỦ ĐỀ LỚP:
+{class_topic(cid)}
+
+CÂU HỎI:
+{cfg.get("question", "")}
+
+CÁC VÙNG/ĐIỂM:
+{zones}
+
+DỮ LIỆU GHIM:
+{df.to_string(index=False)}
+
+YÊU CẦU:
+{prompt}
+"""
+        render_ai_panel(cid, "pin", cfg.get("question", ""), df, _pin_payload)
         return
 
 # ============================================================
