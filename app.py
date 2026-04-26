@@ -135,64 +135,35 @@ def get_ai_client():
         return None, f"Lỗi khởi tạo Gemini: {repr(e)}"
 
 
-def run_gemini_ai(payload: str, model_name: str = "gemini-2.5-flash") -> tuple[str | None, str | None]:
-    """
-    Gọi Gemini bằng SDK google-genai.
-    Trả về: (text, error)
-    """
+def run_gemini_ai(payload: str, model_name: str = "gemini-2.5-flash-lite") -> tuple[str | None, str | None]:
     client, err = get_ai_client()
     if err:
         return None, err
-
     try:
-        response = client.models.generate_content(
-            model=model_name,
-            contents=payload,
-        )
-
+        response = client.models.generate_content(model=model_name, contents=payload)
         text = getattr(response, "text", None)
-
         if not text:
             try:
                 parts = response.candidates[0].content.parts
-                text = "\n".join(
-                    [p.text for p in parts if hasattr(p, "text") and p.text]
-                )
+                text = "\n".join([getattr(p, "text", "") for p in parts if getattr(p, "text", "")])
             except Exception:
                 text = None
-
         if not text or not str(text).strip():
-            return None, "Gemini đã phản hồi nhưng không có nội dung text để hiển thị."
-
+            return None, "Gemini đã phản hồi nhưng không có nội dung text. Raw response rút gọn: " + repr(response)[:2500]
         return str(text).strip(), None
-
     except Exception as e:
         msg = str(e)
-
-        if "API key expired" in msg:
-            return None, (
-                "API key Google AI đã hết hạn. "
-                "Anh cần tạo API key mới tại Google AI Studio, cập nhật GEMINI_API_KEY trong Streamlit Secrets, rồi Reboot app."
-            )
-
+        raw = repr(e)[:2200]
+        if "RESOURCE_EXHAUSTED" in msg or "Quota exceeded" in msg or "429" in msg:
+            return None, "Đã vượt quota Gemini API hoặc model hiện tại không còn quota miễn phí. Đây là lỗi quota/billing, không phải lỗi giao diện. Chi tiết: " + raw
+        if "PERMISSION_DENIED" in msg or "403" in msg:
+            return None, "API key chưa có quyền sử dụng Gemini API hoặc dịch vụ Gemini API chưa được bật. Chi tiết: " + raw
         if "API_KEY_INVALID" in msg or "API key not valid" in msg:
-            return None, (
-                "API key Google AI không hợp lệ hoặc không còn dùng được. "
-                "Anh cần kiểm tra lại GEMINI_API_KEY trong Streamlit Secrets hoặc tạo key mới."
-            )
+            return None, "API key Google AI không hợp lệ hoặc không còn dùng được. Chi tiết: " + raw
+        if "NOT_FOUND" in msg or "404" in msg:
+            return None, "Không tìm thấy model hoặc model này chưa hỗ trợ key hiện tại. Thử gemini-2.0-flash hoặc gemini-1.5-flash. Chi tiết: " + raw
+        return None, "Lỗi khi gọi Gemini API: " + raw
 
-        if "RESOURCE_EXHAUSTED" in msg or "Quota exceeded" in msg:
-            return None, (
-                "Đã vượt quota Gemini API hoặc model hiện tại không còn quota miễn phí. "
-                "Anh hãy chờ quota reset, đổi model, hoặc bật billing/nâng cấp quota trong Google AI Studio."
-            )
-
-        if "PERMISSION_DENIED" in msg:
-            return None, (
-                "API key chưa có quyền sử dụng Gemini API hoặc dịch vụ Gemini API chưa được bật."
-            )
-
-        return None, f"Lỗi khi gọi Gemini API: {repr(e)}"
 # ============================================================
 # 2) DATA LAYER (CSV append-only + teacher cached reads)
 # ============================================================
@@ -514,21 +485,14 @@ def render_question_bank_manager(cid: str, kind: str, bank: dict, current_qid: s
                 st.rerun()
 
 def render_ai_panel(cid: str, act: str, qtext: str, df: pd.DataFrame, payload_builder):
-    """
-    Bảng AI cho giảng viên.
-    Nguyên tắc giao diện:
-    - Luôn hiện khung kết quả, kể cả khi chưa cấu hình API hoặc API bị lỗi.
-    - Khi lỗi phải hiện lỗi ngay trên giao diện, không chỉ nằm trong Console/Terminal.
-    - Chỉ gọi AI khi giảng viên bấm nút PHÂN TÍCH NGAY.
-    """
     cfg = load_activity_config(cid, act)
 
-    # Không dùng hash() của Python vì có thể thay đổi khi app restart.
-    # Dùng md5 để key lưu kết quả ổn định hơn theo lớp + hoạt động + câu hỏi.
     stable_id = hashlib.md5(f"{cid}|{act}|{qtext}".encode("utf-8")).hexdigest()[:12]
     result_key = f"ai_result_{stable_id}"
     error_key = f"ai_error_{stable_id}"
+    status_key = f"ai_status_{stable_id}"
     last_payload_key = f"ai_last_payload_{stable_id}"
+    last_model_key = f"ai_last_model_{stable_id}"
 
     with st.expander("🤖 AI phân tích câu trả lời học viên (chỉ giảng viên)", expanded=True):
         st.caption("AI chỉ chạy khi giảng viên bấm PHÂN TÍCH NGAY; học viên không gọi API.")
@@ -542,63 +506,90 @@ def render_ai_panel(cid: str, act: str, qtext: str, df: pd.DataFrame, payload_bu
 
         model_name = st.selectbox(
             "Model Gemini",
-            ["gemini-2.5-flash-lite", "gemini-2.5-flash", "gemini-2.0-flash"],
+            ["gemini-2.5-flash-lite", "gemini-2.5-flash", "gemini-2.0-flash", "gemini-1.5-flash"],
             index=0,
             key=f"{act}_ai_model_runtime",
-            help="Nên dùng Flash-Lite để tiết kiệm chi phí; chỉ đổi model khi cần phân tích sâu hơn hoặc model hiện tại hết quota.",
+            help="Nếu không ra kết quả, thử gemini-2.0-flash hoặc gemini-1.5-flash để kiểm tra model/quota.",
         )
 
-        result_box = st.container(border=True)
-
-        c1, c2 = st.columns([1, 1])
+        c1, c2, c3 = st.columns([1, 1, 1])
         with c1:
             run_clicked = st.button("PHÂN TÍCH NGAY", key=f"{act}_ai_run")
         with c2:
-            if st.button("XOÁ KẾT QUẢ AI", key=f"{act}_ai_clear"):
-                st.session_state[result_key] = ""
-                st.session_state[error_key] = ""
-                st.session_state[last_payload_key] = ""
-                st.rerun()
+            test_clicked = st.button("TEST API", key=f"{act}_ai_test")
+        with c3:
+            clear_clicked = st.button("XOÁ KẾT QUẢ AI", key=f"{act}_ai_clear")
+
+        if clear_clicked:
+            st.session_state[result_key] = ""
+            st.session_state[error_key] = ""
+            st.session_state[status_key] = "Đã xoá kết quả AI."
+            st.session_state[last_payload_key] = ""
+            st.session_state[last_model_key] = ""
+            st.rerun()
+
+        if test_clicked:
+            st.session_state[result_key] = ""
+            st.session_state[error_key] = ""
+            st.session_state[status_key] = "Đã bấm TEST API. Đang gọi Gemini..."
+            test_payload = "Hãy trả lời đúng một dòng duy nhất: OK"
+            st.session_state[last_payload_key] = test_payload
+            st.session_state[last_model_key] = model_name
+            with st.spinner("Đang test Gemini API..."):
+                text, err = run_gemini_ai(test_payload, model_name=model_name)
+            if err:
+                st.session_state[error_key] = err
+                st.session_state[status_key] = "TEST API thất bại."
+            else:
+                st.session_state[result_key] = text
+                st.session_state[status_key] = "TEST API thành công."
+            st.rerun()
 
         if run_clicked:
+            st.session_state[result_key] = ""
+            st.session_state[error_key] = ""
+            st.session_state[status_key] = "Đã bấm PHÂN TÍCH NGAY. Đang kiểm tra dữ liệu..."
             if df is None or df.empty:
                 st.session_state[error_key] = "Chưa có dữ liệu để AI phân tích. Hãy chờ học viên gửi câu trả lời trước."
-                st.session_state[result_key] = ""
+                st.session_state[status_key] = "Không gọi AI vì chưa có dữ liệu."
+                st.rerun()
             else:
-                client, ai_err = get_ai_client()
-                if ai_err:
-                    st.session_state[error_key] = ai_err
-                    st.session_state[result_key] = ""
+                payload = payload_builder(prompt)
+                st.session_state[last_payload_key] = payload[:8000]
+                st.session_state[last_model_key] = model_name
+                with st.spinner("AI đang phân tích..."):
+                    text, err = run_gemini_ai(payload, model_name=model_name)
+                if err:
+                    st.session_state[error_key] = err
+                    st.session_state[status_key] = "Gemini trả về lỗi. Xem ô lỗi bên dưới."
                 else:
-                    payload = payload_builder(prompt)
-                    st.session_state[last_payload_key] = payload[:5000]
-                    with st.spinner("AI đang phân tích..."):
-                        text, err = run_gemini_ai(payload, model_name=model_name)
-                    if err:
-                        st.session_state[error_key] = err
-                        st.session_state[result_key] = ""
-                    else:
-                        st.session_state[result_key] = text
-                        st.session_state[error_key] = ""
+                    st.session_state[result_key] = text
+                    st.session_state[status_key] = "Phân tích AI thành công."
+                st.rerun()
 
-        with result_box:
-            st.markdown("### Kết quả phân tích của AI")
+        st.markdown("### Kết quả phân tích của AI")
+        with st.container(border=True):
+            if st.session_state.get(status_key):
+                st.info(st.session_state[status_key])
             if st.session_state.get(error_key):
                 st.error(st.session_state[error_key])
             elif st.session_state.get(result_key):
                 st.markdown(st.session_state[result_key])
             else:
-                st.caption("Kết quả AI sẽ hiển thị tại đây sau khi bấm PHÂN TÍCH NGAY.")
+                st.caption("Kết quả AI sẽ hiển thị tại đây sau khi bấm PHÂN TÍCH NGAY hoặc TEST API.")
 
-        with st.expander("🧪 Kiểm tra kỹ thuật", expanded=False):
+        with st.expander("🧪 Kiểm tra kỹ thuật", expanded=True):
             client, ai_err = get_ai_client()
             if ai_err:
                 st.error(f"Tình trạng API: {ai_err}")
             else:
                 st.success("Tình trạng API: đã tìm thấy GEMINI_API_KEY và khởi tạo được client.")
+            st.write(f"Model vừa dùng: {st.session_state.get(last_model_key, 'Chưa gọi')}")
             st.write(f"Số dòng dữ liệu hiện có: {0 if df is None else len(df)}")
+            st.write(f"Có result_key: {bool(st.session_state.get(result_key))}")
+            st.write(f"Có error_key: {bool(st.session_state.get(error_key))}")
             if st.session_state.get(last_payload_key):
-                st.text_area("Payload đã gửi gần nhất — rút gọn", st.session_state[last_payload_key], height=180)
+                st.text_area("Payload đã gửi gần nhất — rút gọn", st.session_state[last_payload_key], height=220)
 
 # ============================================================
 # 5) QUESTION BANK (Wordcloud + OpenEnded) - teacher full, student sees active only
