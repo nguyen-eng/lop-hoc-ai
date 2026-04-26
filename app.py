@@ -340,71 +340,19 @@ CLASSES = {f"Lớp học {i}": f"lop{i}" for i in range(1, 11)}
 PASSWORDS = {f"lop{i}": f"T05-{i}" for i in range(1, 9)}
 PASSWORDS.update({f"lop{i}": f"LH{i}" for i in range(9, 11)})
 
-def class_topic(cid: str) -> str:
-    if cid in ["lop1", "lop2"]:
-        return "Cặp phạm trù Nguyên nhân – Kết quả (phân biệt nguyên cớ, điều kiện)"
-    if cid in ["lop3", "lop4"]:
-        return "Quy luật Phủ định của phủ định"
-    if cid in ["lop5", "lop6"]:
-        return "Triết học về con người: quan niệm – bản chất; tha hóa lao động; giải phóng con người"
-    if cid in ["lop7", "lop8"]:
-        return "Triết học về con người: cá nhân – xã hội; vấn đề con người trong Việt Nam"
-    return "Triết học Mác-xít (tổng quan các vấn đề cơ bản)"
-
+# Không gắn sẵn chủ đề/câu hỏi cho từng lớp.
+# Giảng viên vào từng hoạt động để thiết lập câu hỏi/vấn đề, phương án,
+# tiêu chí, mục xếp hạng và prompt AI.
 CLASS_ACT_CONFIG = {}
 for i in range(1, 11):
     cid = f"lop{i}"
-    topic = class_topic(cid)
-
-    if cid in ["lop1", "lop2"]:
-        wc_q = "Nêu 1 từ khóa để phân biệt *nguyên nhân* với *nguyên cớ*."
-        poll_q = "Trong tình huống va quẹt xe rồi phát sinh đánh nhau, 'va quẹt xe' là gì?"
-        poll_opts = ["Nguyên nhân trực tiếp", "Nguyên cớ", "Kết quả", "Điều kiện đủ"]
-        open_q = "Hãy viết 3–5 câu: phân biệt *nguyên nhân – nguyên cớ – điều kiện* trong một vụ án giả định (tự chọn)."
-        criteria = ["Nhận diện nguyên nhân", "Nhận diện nguyên cớ", "Nhận diện điều kiện", "Lập luận logic"]
-        rank_items = ["Thu thập dấu vết vật chất", "Xác minh chuỗi nguyên nhân", "Loại bỏ 'nguyên cớ' ngụy biện", "Kiểm tra điều kiện cần/đủ"]
-        pin_q = "Ghim 'điểm nóng' nơi dễ phát sinh nguyên cớ (kích động, tin đồn...) trong sơ đồ."
-    elif cid in ["lop3", "lop4"]:
-        wc_q = "1 từ khóa mô tả đúng nhất 'tính kế thừa' trong phủ định biện chứng?"
-        poll_q = "Điểm phân biệt cốt lõi giữa 'phủ định biện chứng' và 'phủ định siêu hình' là gì?"
-        poll_opts = ["Có tính kế thừa", "Phủ định sạch trơn", "Ngẫu nhiên thuần túy", "Không dựa mâu thuẫn nội tại"]
-        open_q = "Nêu 1 ví dụ trong công tác/đời sống thể hiện phát triển theo 'đường xoáy ốc' (tối thiểu 5 câu)."
-        criteria = ["Nêu đúng 2 lần phủ định", "Chỉ ra yếu tố kế thừa", "Chỉ ra yếu tố vượt bỏ", "Kết nối thực tiễn"]
-        rank_items = ["Xác định cái cũ cần vượt bỏ", "Giữ lại yếu tố hợp lý", "Tạo cơ chế tự phủ định", "Ổn định cái mới"]
-        pin_q = "Ghim vị trí minh họa 'điểm bẻ gãy' khi mâu thuẫn chín muồi dẫn tới phủ định."
-    elif cid in ["lop5", "lop6"]:
-        wc_q = "1 từ khóa mô tả 'bản chất con người' trong quan điểm Mác?"
-        poll_q = "Theo Mác, bản chất con người trước hết là gì?"
-        poll_opts = ["Tổng hòa các quan hệ xã hội", "Bản năng sinh học cố định", "Tinh thần thuần túy", "Ý chí cá nhân đơn lẻ"]
-        open_q = "Mô tả một biểu hiện 'tha hóa' trong lao động (5–7 câu) và gợi ý 1 hướng 'giải phóng'."
-        criteria = ["Nêu đúng biểu hiện tha hóa", "Chỉ ra nguyên nhân xã hội", "Nêu hướng khắc phục", "Tính thực tiễn"]
-        rank_items = ["Cải thiện điều kiện lao động", "Dân chủ hóa tổ chức", "Phát triển năng lực NLĐ", "Phân phối công bằng"]
-        pin_q = "Ghim nơi thể hiện mâu thuẫn giữa 'con người' và 'cơ chế' gây tha hóa (tượng trưng)."
-    elif cid in ["lop7", "lop8"]:
-        wc_q = "1 từ khóa mô tả quan hệ *cá nhân – xã hội* theo cách nhìn biện chứng?"
-        poll_q = "Khẳng định nào đúng nhất về quan hệ cá nhân – xã hội?"
-        poll_opts = ["Cá nhân và xã hội quy định lẫn nhau", "Xã hội chỉ là tổng số cá nhân", "Cá nhân quyết định tuyệt đối", "Xã hội quyết định tuyệt đối"]
-        open_q = "Nêu 1 vấn đề con người ở Việt Nam hiện nay và phân tích theo 2 chiều: cá nhân – xã hội."
-        criteria = ["Nêu vấn đề đúng trọng tâm", "Phân tích chiều cá nhân", "Phân tích chiều xã hội", "Đề xuất giải pháp"]
-        rank_items = ["Giáo dục đạo đức – pháp luật", "Môi trường xã hội lành mạnh", "Cơ chế khuyến khích", "Xử lý lệch chuẩn công bằng"]
-        pin_q = "Ghim vị trí 'điểm nghẽn' giữa cá nhân – tổ chức – xã hội (tượng trưng)."
-    else:
-        wc_q = "1 từ khóa mô tả 'hạt nhân' của phép biện chứng duy vật?"
-        poll_q = "Trong triết học Mác – Lênin, vấn đề cơ bản của triết học là gì?"
-        poll_opts = ["Quan hệ vật chất – ý thức", "Quan hệ cái riêng – cái chung", "Quan hệ lượng – chất", "Quan hệ hình thức – nội dung"]
-        open_q = "Viết 5–7 câu: Vì sao người cán bộ cần lập trường duy vật biện chứng khi xử lý chứng cứ?"
-        criteria = ["Nêu đúng nguyên tắc", "Lập luận chặt chẽ", "Liên hệ nghề nghiệp", "Diễn đạt rõ ràng"]
-        rank_items = ["Tôn trọng khách quan", "Chứng cứ vật chất", "Phân tích mâu thuẫn", "Kết luận kiểm chứng được"]
-        pin_q = "Ghim vị trí 'nơi phát sinh sai lệch nhận thức' trong quy trình xử lý thông tin (tượng trưng)."
-
     CLASS_ACT_CONFIG[cid] = {
-        "topic": topic,
-        "wordcloud": {"name": "Word Cloud", "question": wc_q},
-        "poll": {"name": "Poll", "question": poll_q, "options": poll_opts},
-        "openended": {"name": "Open Ended", "question": open_q},
-        "scales": {"name": "Scales", "question": "Tự đánh giá theo thang 1–5.", "criteria": criteria},
-        "ranking": {"name": "Ranking", "question": "Sắp xếp ưu tiên (quan trọng nhất lên đầu).", "items": rank_items},
-        "pin": {"name": "Pin", "question": pin_q, "image": MAP_IMAGE},
+        "wordcloud": {"name": "Word Cloud", "question": ""},
+        "poll": {"name": "Poll", "question": "", "options": []},
+        "openended": {"name": "Open Ended", "question": ""},
+        "scales": {"name": "Scales", "question": "", "criteria": []},
+        "ranking": {"name": "Ranking", "question": "", "items": []},
+        "pin": {"name": "Pin", "question": "", "image": MAP_IMAGE, "zones": []},
     }
 
 
@@ -439,7 +387,7 @@ def default_activity_config(cid: str, act: str) -> dict:
     base.setdefault("enabled", True)
     base.setdefault("ai_prompt", DEFAULT_AI_PROMPTS.get(act, DEFAULT_AI_PROMPTS["openended"]))
     if act == "pin":
-        base.setdefault("zones", DEFAULT_ZONES)
+        base.setdefault("zones", [])
     return base
 
 def load_activity_config(cid: str, act: str) -> dict:
@@ -455,17 +403,17 @@ def load_activity_config(cid: str, act: str) -> dict:
             pass
     base["name"] = ACT_LABELS.get(act, base.get("name", act))
     base["enabled"] = bool(base.get("enabled", True))
-    base["question"] = str(base.get("question", "")).strip() or default_activity_config(cid, act).get("question", "")
+    base["question"] = str(base.get("question", "")).strip()
     base["ai_prompt"] = str(base.get("ai_prompt", DEFAULT_AI_PROMPTS.get(act, ""))).strip()
     if act == "poll":
-        base["options"] = _normalize_list(base.get("options"), default_activity_config(cid, act).get("options", []))[:12]
+        base["options"] = _normalize_list(base.get("options"), [])[:12]
     if act == "scales":
-        base["criteria"] = _normalize_list(base.get("criteria"), default_activity_config(cid, act).get("criteria", []))[:12]
+        base["criteria"] = _normalize_list(base.get("criteria"), [])[:12]
     if act == "ranking":
-        base["items"] = _normalize_list(base.get("items"), default_activity_config(cid, act).get("items", []))[:12]
+        base["items"] = _normalize_list(base.get("items"), [])[:12]
     if act == "pin":
         base["image"] = str(base.get("image", MAP_IMAGE)).strip() or MAP_IMAGE
-        base["zones"] = _normalize_list(base.get("zones"), DEFAULT_ZONES)[:20]
+        base["zones"] = _normalize_list(base.get("zones"), [])[:20]
     return base
 
 def save_activity_config(cid: str, act: str, cfg: dict):
@@ -493,9 +441,9 @@ def render_activity_settings(cid: str, act: str, cfg: dict, active_q_text: str |
             new_cfg["items"] = _normalize_list(items, cfg.get("items", []))[:12]
         elif act == "pin":
             image = st.text_input("Link ảnh/sơ đồ minh họa", value=cfg.get("image", MAP_IMAGE), key="pin_image_editor")
-            zones = st.text_area("Vùng/điểm lựa chọn — mỗi dòng một mục", value="\n".join(cfg.get("zones", DEFAULT_ZONES)), height=150, key="pin_zones_editor")
+            zones = st.text_area("Vùng/điểm lựa chọn — mỗi dòng một mục", value="\n".join(cfg.get("zones", [])), height=150, key="pin_zones_editor")
             new_cfg["image"] = image.strip() or MAP_IMAGE
-            new_cfg["zones"] = _normalize_list(zones, DEFAULT_ZONES)[:20]
+            new_cfg["zones"] = _normalize_list(zones, [])[:20]
 
         ai_prompt = st.text_area("Prompt AI mặc định cho giảng viên", value=cfg.get("ai_prompt", DEFAULT_AI_PROMPTS.get(act, "")), height=130, key=f"ai_prompt_editor_{act}")
         new_cfg["ai_prompt"] = ai_prompt.strip()
@@ -527,7 +475,7 @@ def render_question_bank_manager(cid: str, kind: str, bank: dict, current_qid: s
     title = "WordCloud" if kind == "wc" else "OpenEnded"
     with st.expander(f"🧠 Ngân hàng câu hỏi {title}", expanded=False):
         aq = get_active_question(bank, "")
-        st.success(f"Đang kích hoạt: ({aq.get('id')}) {aq.get('text')}")
+        st.caption(f"Câu đang chọn: ({aq.get('id')}) {aq.get('text') or 'chưa có nội dung'}")
         with st.form(f"{kind}_add_q", clear_on_submit=True):
             new_q = st.text_area("Thêm câu hỏi/vấn đề mới", height=100, key=f"{kind}_new_q_text")
             make_active = st.checkbox("Kích hoạt ngay", value=True, key=f"{kind}_make_active")
@@ -996,16 +944,17 @@ def render_class_home():
     cls_txt = next((k for k, v in CLASSES.items() if v == cid), cid)
 
     st.markdown(f"## 📚 Danh mục hoạt động • **{cls_txt}**")
-    st.caption(f"Chủ đề chung: {class_topic(cid)}")
 
     acts = [("wordcloud", "Word Cloud"), ("poll", "Poll"), ("openended", "Open Ended"), ("scales", "Scales"), ("ranking", "Ranking"), ("pin", "Pin")]
     for key, title in acts:
         acfg = load_activity_config(cid, key)
         box = st.container(border=True)
         with box:
-            status = "🟢 Đang kích hoạt" if acfg.get("enabled", True) else "⚪ Chưa kích hoạt"
-            st.markdown(f"### {title} • {status}")
-            st.caption(acfg.get("question", ""))
+            st.markdown(f"### {title}")
+            if str(acfg.get("question", "")).strip():
+                st.caption(acfg.get("question", ""))
+            elif role == "teacher":
+                st.caption("Chưa thiết lập câu hỏi/vấn đề. Bấm MỞ để cấu hình hoạt động.")
 
             if role == "teacher":
                 if key == "wordcloud":
@@ -1041,7 +990,6 @@ def render_dashboard():
     cid = st.session_state["class_id"]
 
     st.markdown("## 🏠 Dashboard (Giảng viên)")
-    st.caption(f"Chủ đề chung: {class_topic(cid)}")
 
     live = st.toggle("🔴 Live update (1.5s)", value=True)
     if live and st_autorefresh is not None:
@@ -1105,8 +1053,14 @@ def render_activity():
     if role == "teacher":
         render_activity_settings(cid, act, cfg)
     elif not cfg.get("enabled", True):
-        st.warning("Hoạt động này hiện chưa được giảng viên kích hoạt.")
+        st.warning("Hoạt động này hiện chưa được giảng viên mở cho học viên.")
         return
+
+    def _missing_setup(message: str):
+        if role == "teacher":
+            st.warning(message + " Hãy mở phần thiết lập hoạt động phía trên để cấu hình.")
+        else:
+            st.warning("Hoạt động này chưa có câu hỏi/vấn đề do giảng viên thiết lập.")
 
     # -----------------------------
     # WORDCLOUD
@@ -1115,9 +1069,15 @@ def render_activity():
         bank = load_bank(cid, "wc", cfg["question"])
         aq = get_active_question(bank, cfg["question"])
         qid = aq["id"]
-        qtext = aq["text"]
+        qtext = str(aq.get("text", "")).strip()
 
-        st.info(f"Câu hỏi đang kích hoạt ({qid}): **{qtext}**")
+        if not qtext:
+            _missing_setup("WordCloud chưa có câu hỏi/vấn đề.")
+            if role == "teacher":
+                render_question_bank_manager(cid, "wc", bank, qid, "wordcloud")
+            return
+
+        st.info(f"Câu hỏi: **{qtext}**")
 
         # STUDENT: submit-only
         if role == "student":
@@ -1183,8 +1143,6 @@ def render_activity():
             return f"""
 Bạn là trợ giảng cho giảng viên.
 
-CHỦ ĐỀ LỚP:
-{class_topic(cid)}
 
 CÂU HỎI ({qid}):
 {qtext}
@@ -1212,8 +1170,11 @@ Trả lời theo cấu trúc:
     # POLL
     # -----------------------------
     if act == "poll":
-        st.info(f"Câu hỏi: **{cfg['question']}**")
         options = cfg["options"]
+        if not str(cfg.get("question", "")).strip() or not options:
+            _missing_setup("Poll chưa có đủ câu hỏi và phương án trả lời.")
+            return
+        st.info(f"Câu hỏi: **{cfg['question']}**")
 
         if role == "student":
             with st.form("poll_student_form", clear_on_submit=True):
@@ -1257,8 +1218,6 @@ Trả lời theo cấu trúc:
             return f"""
 Bạn là trợ giảng cho giảng viên.
 
-CHỦ ĐỀ LỚP:
-{class_topic(cid)}
 
 CÂU HỎI:
 {cfg.get("question", "")}
@@ -1282,9 +1241,15 @@ YÊU CẦU:
         bank = load_bank(cid, "oe", cfg["question"])
         aq = get_active_question(bank, cfg["question"])
         qid = aq["id"]
-        qtext = aq["text"]
+        qtext = str(aq.get("text", "")).strip()
 
-        st.info(f"Câu hỏi đang kích hoạt ({qid}): **{qtext}**")
+        if not qtext:
+            _missing_setup("OpenEnded chưa có câu hỏi/vấn đề.")
+            if role == "teacher":
+                render_question_bank_manager(cid, "oe", bank, qid, "openended")
+            return
+
+        st.info(f"Câu hỏi: **{qtext}**")
 
         if role == "student":
             with st.form("oe_student_form", clear_on_submit=True):
@@ -1329,8 +1294,6 @@ YÊU CẦU:
             return f"""
 Bạn là trợ giảng cho giảng viên.
 
-CHỦ ĐỀ LỚP:
-{class_topic(cid)}
 
 CÂU HỎI ({qid}):
 {qtext}
@@ -1357,6 +1320,9 @@ Trả lời theo cấu trúc:
     # -----------------------------
     if act == "scales":
         criteria = cfg["criteria"]
+        if not str(cfg.get("question", "")).strip() or not criteria:
+            _missing_setup("Scales chưa có đủ câu hỏi và tiêu chí thang đo.")
+            return
         st.info(f"**{cfg['question']}**")
 
         if role == "student":
@@ -1408,8 +1374,6 @@ Trả lời theo cấu trúc:
             return f"""
 Bạn là trợ giảng cho giảng viên.
 
-CHỦ ĐỀ LỚP:
-{class_topic(cid)}
 
 CÂU HỎI:
 {cfg.get("question", "")}
@@ -1431,6 +1395,9 @@ YÊU CẦU:
     # -----------------------------
     if act == "ranking":
         items = cfg["items"]
+        if not str(cfg.get("question", "")).strip() or not items:
+            _missing_setup("Ranking chưa có đủ câu hỏi và các mục xếp hạng.")
+            return
         st.info(f"**{cfg['question']}**")
 
         if role == "student":
@@ -1481,8 +1448,6 @@ YÊU CẦU:
             return f"""
 Bạn là trợ giảng cho giảng viên.
 
-CHỦ ĐỀ LỚP:
-{class_topic(cid)}
 
 CÂU HỎI:
 {cfg.get("question", "")}
@@ -1505,10 +1470,12 @@ YÊU CẦU:
     # - Teacher: aggregates counts + shows list
     # -----------------------------
     if act == "pin":
+        zones = cfg.get("zones", [])
+        if not str(cfg.get("question", "")).strip() or not zones:
+            _missing_setup("Pin chưa có đủ câu hỏi và vùng/điểm lựa chọn.")
+            return
         st.info(f"**{cfg['question']}**")
         st.image(cfg.get("image", MAP_IMAGE), caption="Sơ đồ minh họa (tượng trưng)", use_container_width=True)
-
-        zones = cfg.get("zones", DEFAULT_ZONES)
 
         if role == "student":
             with st.form("pin_student", clear_on_submit=True):
@@ -1558,8 +1525,6 @@ YÊU CẦU:
             return f"""
 Bạn là trợ giảng cho giảng viên.
 
-CHỦ ĐỀ LỚP:
-{class_topic(cid)}
 
 CÂU HỎI:
 {cfg.get("question", "")}
