@@ -13,6 +13,7 @@ import uuid
 import time
 import threading
 import copy
+import hashlib
 from datetime import datetime
 
 import streamlit as st
@@ -513,28 +514,73 @@ def render_question_bank_manager(cid: str, kind: str, bank: dict, current_qid: s
                 st.rerun()
 
 def render_ai_panel(cid: str, act: str, qtext: str, df: pd.DataFrame, payload_builder):
+    """
+    Bảng AI cho giảng viên.
+    Nguyên tắc giao diện:
+    - Luôn hiện khung kết quả, kể cả khi chưa cấu hình API hoặc API bị lỗi.
+    - Khi lỗi phải hiện lỗi ngay trên giao diện, không chỉ nằm trong Console/Terminal.
+    - Chỉ gọi AI khi giảng viên bấm nút PHÂN TÍCH NGAY.
+    """
     cfg = load_activity_config(cid, act)
-    with st.expander("🤖 AI phân tích câu trả lời học viên (chỉ giảng viên)", expanded=False):
-        client, ai_err = get_ai_client()
-        if ai_err:
-            st.warning(ai_err)
-            return
-        prompt = st.text_area("Prompt truy vấn AI", value=cfg.get("ai_prompt", DEFAULT_AI_PROMPTS.get(act, "")), height=130, key=f"{act}_ai_prompt_runtime")
-        result_key = f"ai_result_{cid}_{act}_{abs(hash(qtext))}"
-        error_key = f"ai_error_{cid}_{act}_{abs(hash(qtext))}"
+
+    # Không dùng hash() của Python vì có thể thay đổi khi app restart.
+    # Dùng md5 để key lưu kết quả ổn định hơn theo lớp + hoạt động + câu hỏi.
+    stable_id = hashlib.md5(f"{cid}|{act}|{qtext}".encode("utf-8")).hexdigest()[:12]
+    result_key = f"ai_result_{stable_id}"
+    error_key = f"ai_error_{stable_id}"
+    last_payload_key = f"ai_last_payload_{stable_id}"
+
+    with st.expander("🤖 AI phân tích câu trả lời học viên (chỉ giảng viên)", expanded=True):
+        st.caption("AI chỉ chạy khi giảng viên bấm PHÂN TÍCH NGAY; học viên không gọi API.")
+
+        prompt = st.text_area(
+            "Prompt truy vấn AI",
+            value=cfg.get("ai_prompt", DEFAULT_AI_PROMPTS.get(act, "")),
+            height=130,
+            key=f"{act}_ai_prompt_runtime",
+        )
+
+        model_name = st.selectbox(
+            "Model Gemini",
+            ["gemini-2.5-flash-lite", "gemini-2.5-flash", "gemini-2.0-flash"],
+            index=0,
+            key=f"{act}_ai_model_runtime",
+            help="Nên dùng Flash-Lite để tiết kiệm chi phí; chỉ đổi model khi cần phân tích sâu hơn hoặc model hiện tại hết quota.",
+        )
+
         result_box = st.container(border=True)
-        if st.button("PHÂN TÍCH NGAY", key=f"{act}_ai_run"):
+
+        c1, c2 = st.columns([1, 1])
+        with c1:
+            run_clicked = st.button("PHÂN TÍCH NGAY", key=f"{act}_ai_run")
+        with c2:
+            if st.button("XOÁ KẾT QUẢ AI", key=f"{act}_ai_clear"):
+                st.session_state[result_key] = ""
+                st.session_state[error_key] = ""
+                st.session_state[last_payload_key] = ""
+                st.rerun()
+
+        if run_clicked:
             if df is None or df.empty:
-                st.warning("Chưa có dữ liệu để AI phân tích.")
+                st.session_state[error_key] = "Chưa có dữ liệu để AI phân tích. Hãy chờ học viên gửi câu trả lời trước."
+                st.session_state[result_key] = ""
             else:
-                with st.spinner("AI đang phân tích..."):
-                    text, err = run_gemini_ai(payload_builder(prompt))
-                if err:
-                    st.session_state[error_key] = err
+                client, ai_err = get_ai_client()
+                if ai_err:
+                    st.session_state[error_key] = ai_err
                     st.session_state[result_key] = ""
                 else:
-                    st.session_state[result_key] = text
-                    st.session_state[error_key] = ""
+                    payload = payload_builder(prompt)
+                    st.session_state[last_payload_key] = payload[:5000]
+                    with st.spinner("AI đang phân tích..."):
+                        text, err = run_gemini_ai(payload, model_name=model_name)
+                    if err:
+                        st.session_state[error_key] = err
+                        st.session_state[result_key] = ""
+                    else:
+                        st.session_state[result_key] = text
+                        st.session_state[error_key] = ""
+
         with result_box:
             st.markdown("### Kết quả phân tích của AI")
             if st.session_state.get(error_key):
@@ -543,6 +589,16 @@ def render_ai_panel(cid: str, act: str, qtext: str, df: pd.DataFrame, payload_bu
                 st.markdown(st.session_state[result_key])
             else:
                 st.caption("Kết quả AI sẽ hiển thị tại đây sau khi bấm PHÂN TÍCH NGAY.")
+
+        with st.expander("🧪 Kiểm tra kỹ thuật", expanded=False):
+            client, ai_err = get_ai_client()
+            if ai_err:
+                st.error(f"Tình trạng API: {ai_err}")
+            else:
+                st.success("Tình trạng API: đã tìm thấy GEMINI_API_KEY và khởi tạo được client.")
+            st.write(f"Số dòng dữ liệu hiện có: {0 if df is None else len(df)}")
+            if st.session_state.get(last_payload_key):
+                st.text_area("Payload đã gửi gần nhất — rút gọn", st.session_state[last_payload_key], height=180)
 
 # ============================================================
 # 5) QUESTION BANK (Wordcloud + OpenEnded) - teacher full, student sees active only
