@@ -1159,6 +1159,73 @@ def build_wordcloud_html(words_json: str, height_px: int = 520, fullscreen_butto
 </html>
 """
 
+
+def build_wordcloud_fullscreen_launcher(words_json: str) -> str:
+    """One-click real fullscreen launcher for teacher wordcloud."""
+    return f"""
+<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8"/>
+  <style>
+    html, body {{ margin:0; padding:0; background:transparent; font-family: system-ui, -apple-system, Segoe UI, Roboto, Arial, sans-serif; }}
+    #launch {{ border:0; border-radius:14px; padding:14px 18px; background:#047857; color:white; font-weight:900; font-size:15px; box-shadow:0 10px 26px rgba(0,0,0,.22); cursor:pointer; }}
+    #launch:hover {{ filter:brightness(1.06); }}
+    #stage {{ display:none; background:#fff; width:100vw; height:100vh; overflow:hidden; position:relative; }}
+    #wc-wrap {{ width:100vw; height:100vh; background:#fff; overflow:hidden; }}
+    #exit {{ display:none; position:fixed; right:18px; bottom:18px; z-index:9999; border:0; border-radius:14px; padding:12px 16px; background:#111827; color:white; font-weight:800; cursor:pointer; box-shadow:0 10px 26px rgba(0,0,0,.26); }}
+    body.is-fs #stage {{ display:block; }}
+    body.is-fs #exit {{ display:block; }}
+    body.is-fs #launch {{ display:none; }}
+    .word {{ font-family:'Montserrat', system-ui, -apple-system, Segoe UI, Roboto, Arial, sans-serif; font-weight:800; user-select:none; paint-order:stroke; stroke:rgba(255,255,255,0.85); stroke-width:2px; }}
+  </style>
+</head>
+<body>
+  <button id="launch" type="button">🖥 Fullscreen Wordcloud</button>
+  <div id="stage"><div id="wc-wrap"></div><button id="exit" type="button">ĐÓNG FULLSCREEN</button></div>
+  <script src="https://cdn.jsdelivr.net/npm/d3@7/dist/d3.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/d3-cloud@1/build/d3.layout.cloud.js"></script>
+  <script>
+    const data = {words_json};
+    function mulberry32(a) {{ return function() {{ var t = a += 0x6D2B79F5; t = Math.imul(t ^ t >>> 15, t | 1); t ^= t + Math.imul(t ^ t >>> 7, t | 61); return ((t ^ t >>> 14) >>> 0) / 4294967296; }} }}
+    const rng = mulberry32(42);
+    function hashHue(str) {{ let h = 5381; for (let i=0;i<str.length;i++) {{ h = ((h << 5) + h) + str.charCodeAt(i); h = h & 0xffffffff; }} return Math.abs(h) % 360; }}
+    function getSizeScale(vals) {{ const vmin = Math.max(1, d3.min(vals)); const vmax = Math.max(1, d3.max(vals)); if (vmax === vmin) return () => 58; return d3.scaleSqrt().domain([vmin, vmax]).range([30, 132]).clamp(true); }}
+    function render() {{
+      const wrap = document.getElementById('wc-wrap');
+      const W = Math.max(720, Math.floor(window.innerWidth || 1200));
+      const H = Math.max(420, Math.floor(window.innerHeight || 800));
+      wrap.innerHTML = '';
+      const svg = d3.select('#wc-wrap').append('svg').attr('viewBox', `0 0 ${{W}} ${{H}}`).attr('preserveAspectRatio', 'xMidYMid meet');
+      const g = svg.append('g');
+      const vals = data.map(d => d.value);
+      const fontScale = getSizeScale(vals);
+      const words = data.slice().sort((a,b) => d3.descending(a.value, b.value)).map(d => {{ const hue = hashHue(d.text); return {{ text:d.text, value:d.value, size:Math.round(fontScale(d.value)), rotate:0, color:`hsl(${{hue}}, 84%, 50%)`, __key:d.text }}; }});
+      const layout = d3.layout.cloud().size([W,H]).words(words).padding(16).spiral('archimedean').rotate(d => d.rotate).font('Montserrat').fontSize(d => d.size).random(() => rng());
+      layout.on('end', placed => {{
+        if (!placed || placed.length === 0) return;
+        let minX=Infinity,maxX=-Infinity,minY=Infinity,maxY=-Infinity;
+        placed.forEach(w => {{ const x0=w.x-(w.width||0)/2, x1=w.x+(w.width||0)/2, y0=w.y-(w.height||0)/2, y1=w.y+(w.height||0)/2; if(x0<minX)minX=x0; if(x1>maxX)maxX=x1; if(y0<minY)minY=y0; if(y1>maxY)maxY=y1; }});
+        const bw=Math.max(1,maxX-minX), bh=Math.max(1,maxY-minY), cx=(minX+maxX)/2, cy=(minY+maxY)/2;
+        const s=Math.min((W*.92)/bw,(H*.92)/bh);
+        g.attr('transform', `translate(${{W/2}},${{H/2}}) scale(${{s}}) translate(${{-cx}},${{-cy}})`);
+        g.selectAll('text.word').data(placed, d => d.__key).enter().append('text').attr('class','word').attr('text-anchor','middle').style('fill', d => d.color).style('font-size', d => `${{d.size}}px`).text(d => d.text).attr('transform', d => `translate(${{d.x}},${{d.y}}) rotate(${{d.rotate}})`);
+      }});
+      layout.start();
+    }}
+    async function startFullscreen() {{
+      try {{ await document.documentElement.requestFullscreen(); document.body.classList.add('is-fs'); setTimeout(render, 150); }}
+      catch(e) {{ document.body.classList.add('is-fs'); document.getElementById('launch').textContent = 'Trình duyệt chặn fullscreen - thử F11/Ctrl+Cmd+F'; setTimeout(render, 150); }}
+    }}
+    document.getElementById('launch').addEventListener('click', startFullscreen);
+    document.getElementById('exit').addEventListener('click', async () => {{ if (document.fullscreenElement) await document.exitFullscreen(); }});
+    document.addEventListener('fullscreenchange', () => {{ const on = !!document.fullscreenElement; document.body.classList.toggle('is-fs', on); if (on) setTimeout(render, 150); }});
+    window.addEventListener('resize', () => {{ if (document.body.classList.contains('is-fs')) {{ clearTimeout(window.__wc_t); window.__wc_t = setTimeout(render, 180); }} }});
+  </script>
+</body>
+</html>
+"""
+
 def open_wc_fullscreen_dialog(wc_html: str, live: bool, wc_full_html: str | None = None):
     """Teacher-only fullscreen wordcloud."""
     if _DIALOG_DECORATOR is not None:
@@ -1483,9 +1550,13 @@ def render_activity():
 
                 c1, c2, c3 = st.columns([2, 2, 2])
                 with c1:
-                    if st.button("🖥 Fullscreen Wordcloud"):
-                        st.session_state["wc_fullscreen"] = True
-                        st.rerun()
+                    # One-click real fullscreen: Fullscreen API must be called directly
+                    # by a browser click event, not after a Streamlit rerun.
+                    st.components.v1.html(
+                        build_wordcloud_fullscreen_launcher(json.dumps(payload, ensure_ascii=False)),
+                        height=64,
+                        scrolling=False,
+                    )
                 with c2:
                     show_table = st.toggle("Hiện bảng Top", value=False)
                 with c3:
@@ -1493,9 +1564,6 @@ def render_activity():
                         clear_activity(cid, "wordcloud", suffix=qid)
                         st.toast("Đã reset dữ liệu câu active.")
                         st.rerun()
-
-                if st.session_state.get("wc_fullscreen", False):
-                    open_wc_fullscreen_dialog(wc_html, live=live, wc_full_html=build_wordcloud_html(json.dumps(payload, ensure_ascii=False), height_px=860, fullscreen_button=True))
 
                 if show_table:
                     topk = pd.DataFrame(items[:25], columns=["Từ/cụm (chuẩn hoá)", "Số người nhập"])
