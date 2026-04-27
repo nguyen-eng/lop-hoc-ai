@@ -236,8 +236,20 @@ def build_external_ai_export(
         export_df = export_df[["Học viên", "Nội dung", "Thời gian"]].fillna("")
         total = int(len(export_df))
         unique_students = int(export_df["Học viên"].astype(str).str.strip().replace("", pd.NA).dropna().nunique())
-        data_block = export_df.to_markdown(index=False)
-
+        def _md_escape(value):
+            text = str(value).replace("\r", " ").replace("\n", " ").strip()
+            return text.replace("|", "\\|")
+        
+        columns = ["Học viên", "Nội dung", "Thời gian"]
+        lines = [
+            "| " + " | ".join(columns) + " |",
+            "| " + " | ".join(["---"] * len(columns)) + " |",
+        ]
+        
+        for _, row in export_df.iterrows():
+            lines.append("| " + " | ".join(_md_escape(row[col]) for col in columns) + " |")
+        
+        data_block = "\n".join(lines)
     ai_prompt = str(ai_prompt or "").strip()
     if not ai_prompt:
         ai_prompt = "Giảng viên chưa nhập yêu cầu AI phân tích riêng. Hãy phân tích dữ liệu theo hướng sư phạm, chỉ ra xu hướng, hiểu lầm, điểm mạnh/yếu và gợi ý can thiệp trên lớp."
