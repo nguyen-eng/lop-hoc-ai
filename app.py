@@ -789,8 +789,46 @@ def wc_compute_freq(df: pd.DataFrame):
     total_unique = int(len(freq))
     return freq, total_answers, total_people, total_unique
 
-def build_wordcloud_html(words_json: str, height_px: int = 520) -> str:
+def build_wordcloud_html(words_json: str, height_px: int = 520, fullscreen_button: bool = False) -> str:
     # Preserved: D3 + d3-cloud wordcloud (same idea as your current version)
+    fs_button_html = """
+  <button id="fs-btn" type="button">⛶ BẬT TOÀN MÀN HÌNH TRÌNH CHIẾU</button>
+""" if fullscreen_button else ""
+    fs_button_css = """
+    #fs-btn {
+      position: fixed; right: 18px; bottom: 18px; z-index: 9999;
+      border: 0; border-radius: 14px; padding: 14px 18px;
+      background: #047857; color: white; font-weight: 900; font-size: 15px;
+      box-shadow: 0 10px 30px rgba(0,0,0,.25); cursor: pointer;
+    }
+    #fs-btn:hover { filter: brightness(1.05); }
+""" if fullscreen_button else ""
+    fs_button_js = """
+    const fsBtn = document.getElementById("fs-btn");
+    if (fsBtn) {
+      fsBtn.addEventListener("click", async () => {
+        const root = document.documentElement;
+        try {
+          if (!document.fullscreenElement) {
+            await root.requestFullscreen();
+            fsBtn.textContent = "⛶ THOÁT TOÀN MÀN HÌNH";
+          } else {
+            await document.exitFullscreen();
+            fsBtn.textContent = "⛶ BẬT TOÀN MÀN HÌNH TRÌNH CHIẾU";
+          }
+          setTimeout(render, 250);
+        } catch (e) {
+          fsBtn.textContent = "Trình duyệt đang chặn fullscreen - bấm F11/Ctrl+Cmd+F";
+        }
+      });
+      document.addEventListener("fullscreenchange", () => {
+        const isFs = !!document.fullscreenElement;
+        document.body.classList.toggle("is-fullscreen", isFs);
+        fsBtn.textContent = isFs ? "⛶ THOÁT TOÀN MÀN HÌNH" : "⛶ BẬT TOÀN MÀN HÌNH TRÌNH CHIẾU";
+        setTimeout(render, 250);
+      });
+    }
+""" if fullscreen_button else ""
     return f"""
 <!doctype html>
 <html>
@@ -798,6 +836,8 @@ def build_wordcloud_html(words_json: str, height_px: int = 520) -> str:
   <meta charset="utf-8"/>
   <style>
     body {{ margin:0; background:white; }}
+    body.is-fullscreen #wc-wrap {{ height: 100vh !important; border-radius: 0; }}
+    {fs_button_css}
     #wc-wrap {{
       width: 100%;
       height: {height_px}px;
@@ -819,6 +859,7 @@ def build_wordcloud_html(words_json: str, height_px: int = 520) -> str:
 </head>
 <body>
   <div id="wc-wrap"></div>
+  {fs_button_html}
 
   <script src="https://cdn.jsdelivr.net/npm/d3@7/dist/d3.min.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/d3-cloud@1/build/d3.layout.cloud.js"></script>
@@ -958,19 +999,21 @@ def build_wordcloud_html(words_json: str, height_px: int = 520) -> str:
       clearTimeout(window.__wc_t);
       window.__wc_t = setTimeout(render, 180);
     }});
+
+    {fs_button_js}
   </script>
 </body>
 </html>
 """
 
-def open_wc_fullscreen_dialog(wc_html: str, live: bool):
+def open_wc_fullscreen_dialog(wc_html: str, live: bool, wc_full_html: str | None = None):
     """Teacher-only fullscreen wordcloud."""
     if _DIALOG_DECORATOR is not None:
         @_DIALOG_DECORATOR("🖥 Fullscreen Wordcloud")
         def _inner():
             if live and st_autorefresh is not None:
                 st_autorefresh(interval=1500, key="wc_live_refresh_modal")
-            st.components.v1.html(wc_html, height=760, scrolling=False)
+            st.components.v1.html(wc_full_html or wc_html, height=880, scrolling=False)
             if st.button("ĐÓNG FULLSCREEN", key="wc_close_full"):
                 st.session_state["wc_fullscreen"] = False
                 st.rerun()
@@ -979,7 +1022,7 @@ def open_wc_fullscreen_dialog(wc_html: str, live: bool):
         st.warning("Streamlit phiên bản hiện tại chưa hỗ trợ dialog. Đang hiển thị chế độ thay thế.")
         if live and st_autorefresh is not None:
             st_autorefresh(interval=1500, key="wc_live_refresh_modal_fallback")
-        st.components.v1.html(wc_html, height=760, scrolling=False)
+        st.components.v1.html(wc_full_html or wc_html, height=880, scrolling=False)
         if st.button("ĐÓNG FULLSCREEN", key="wc_close_full_fallback"):
             st.session_state["wc_fullscreen"] = False
             st.rerun()
@@ -1299,7 +1342,7 @@ def render_activity():
                         st.rerun()
 
                 if st.session_state.get("wc_fullscreen", False):
-                    open_wc_fullscreen_dialog(wc_html, live=live)
+                    open_wc_fullscreen_dialog(wc_html, live=live, wc_full_html=build_wordcloud_html(json.dumps(payload, ensure_ascii=False), height_px=860, fullscreen_button=True))
 
                 if show_table:
                     topk = pd.DataFrame(items[:25], columns=["Từ/cụm (chuẩn hoá)", "Số người nhập"])
