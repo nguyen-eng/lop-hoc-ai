@@ -438,12 +438,12 @@ for i in range(1, 11):
 ACT_LABELS = {"wordcloud":"Word Cloud","poll":"Poll","openended":"Open Ended","scales":"Scales","ranking":"Ranking","pin":"Pin"}
 DEFAULT_CLASS_ACT_CONFIG = copy.deepcopy(CLASS_ACT_CONFIG)
 DEFAULT_AI_PROMPTS = {
-    "wordcloud":"Rút ra 3–5 insight chính, phân nhóm từ khóa theo chủ đề, chỉ ra 2–3 hiểu lầm có thể có và đề xuất 3 can thiệp sư phạm.",
-    "openended":"Phân nhóm quan điểm, chỉ ra điểm mạnh/yếu, trích 3 ví dụ tiêu biểu, và đề xuất 3 can thiệp sư phạm.",
-    "poll":"Phân tích phân bố lựa chọn, chỉ ra nhận thức nổi trội, phương án dễ gây nhầm lẫn và đề xuất cách giảng viên xử lý ngay trên lớp.",
-    "scales":"Phân tích mức tự đánh giá của học viên, xác định tiêu chí mạnh/yếu và đề xuất hoạt động củng cố.",
-    "ranking":"Phân tích thứ tự ưu tiên của học viên, nhận diện logic lựa chọn và đề xuất câu hỏi phản biện.",
-    "pin":"Phân tích các vùng/điểm nóng được học viên chọn, nhóm hóa lý do và đề xuất cách khai thác thảo luận.",
+    "wordcloud":"Phân tích dữ liệu phản hồi của học viên theo yêu cầu sư phạm của giảng viên. Không áp dụng khuôn cố định; hãy bám sát câu hỏi, dữ liệu thực tế và mục tiêu bài học.",
+    "openended":"Phân tích dữ liệu phản hồi của học viên theo yêu cầu sư phạm của giảng viên. Không áp dụng khuôn cố định; hãy bám sát câu hỏi, dữ liệu thực tế và mục tiêu bài học.",
+    "poll":"Phân tích dữ liệu phản hồi của học viên theo yêu cầu sư phạm của giảng viên. Không áp dụng khuôn cố định; hãy bám sát câu hỏi, dữ liệu thực tế và mục tiêu bài học.",
+    "scales":"Phân tích dữ liệu phản hồi của học viên theo yêu cầu sư phạm của giảng viên. Không áp dụng khuôn cố định; hãy bám sát câu hỏi, dữ liệu thực tế và mục tiêu bài học.",
+    "ranking":"Phân tích dữ liệu phản hồi của học viên theo yêu cầu sư phạm của giảng viên. Không áp dụng khuôn cố định; hãy bám sát câu hỏi, dữ liệu thực tế và mục tiêu bài học.",
+    "pin":"Phân tích dữ liệu phản hồi của học viên theo yêu cầu sư phạm của giảng viên. Không áp dụng khuôn cố định; hãy bám sát câu hỏi, dữ liệu thực tế và mục tiêu bài học.",
 }
 DEFAULT_ZONES = ["Bắc","Trung","Nam","Khu vực đông dân","Khu vực trường học","Khu vực công nghiệp","Khác"]
 
@@ -497,6 +497,151 @@ def save_activity_config(cid: str, act: str, cfg: dict):
         with open(activity_config_path(cid, act), "w", encoding="utf-8") as f:
             json.dump(cfg, f, ensure_ascii=False, indent=2)
 
+# ============================================================
+# 4C) TEACHER-CUSTOMIZABLE AI REQUEST BANK
+# ============================================================
+def ai_request_bank_path(cid: str, act: str) -> str:
+    return f"ai_requests_{cid}_{act}.json"
+
+def _seed_ai_request_bank(default_prompt: str):
+    now = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+    return {
+        "active_id": "AI1",
+        "requests": [{"id": "AI1", "text": str(default_prompt or "").strip(), "created_at": now, "updated_at": now}],
+    }
+
+def load_ai_request_bank(cid: str, act: str, default_prompt: str = "") -> dict:
+    path = ai_request_bank_path(cid, act)
+    if not os.path.exists(path):
+        return _seed_ai_request_bank(default_prompt)
+    try:
+        with open(path, "r", encoding="utf-8") as f:
+            bank = json.load(f)
+        if not isinstance(bank, dict):
+            return _seed_ai_request_bank(default_prompt)
+        reqs = bank.get("requests", [])
+        if not isinstance(reqs, list) or not reqs:
+            return _seed_ai_request_bank(default_prompt)
+        clean = []
+        for r in reqs:
+            if isinstance(r, dict) and str(r.get("text", "")).strip():
+                clean.append({
+                    "id": str(r.get("id", "")).strip() or "AI1",
+                    "text": str(r.get("text", "")).strip(),
+                    "created_at": str(r.get("created_at", "")),
+                    "updated_at": str(r.get("updated_at", "")),
+                })
+        if not clean:
+            return _seed_ai_request_bank(default_prompt)
+        bank["requests"] = clean
+        ids = {r.get("id") for r in clean}
+        if bank.get("active_id") not in ids:
+            bank["active_id"] = clean[0].get("id", "AI1")
+        return bank
+    except Exception:
+        return _seed_ai_request_bank(default_prompt)
+
+def save_ai_request_bank(cid: str, act: str, bank: dict):
+    try:
+        with data_lock:
+            with open(ai_request_bank_path(cid, act), "w", encoding="utf-8") as f:
+                json.dump(bank, f, ensure_ascii=False, indent=2)
+    except Exception:
+        pass
+
+def make_new_ai_request_id(bank: dict) -> str:
+    nums = []
+    for r in bank.get("requests", []):
+        m = re.match(r"^AI(\d+)$", str(r.get("id", "")).strip(), flags=re.I)
+        if m:
+            nums.append(int(m.group(1)))
+    return f"AI{(max(nums) + 1) if nums else 2}"
+
+def get_active_ai_request(bank: dict, fallback_text: str = "") -> dict:
+    active_id = bank.get("active_id", "AI1")
+    for r in bank.get("requests", []):
+        if r.get("id") == active_id:
+            return r
+    return {"id": "AI1", "text": str(fallback_text or "").strip()}
+
+def render_ai_request_bank_manager(cid: str, act: str, bank: dict):
+    active = get_active_ai_request(bank, "")
+    with st.expander("🧩 Ngân hàng yêu cầu AI", expanded=False):
+        st.caption(f"Yêu cầu AI đang kích hoạt: ({active.get('id')}) {active.get('text')[:140]}{'...' if len(active.get('text','')) > 140 else ''}")
+        with st.form(f"{act}_add_ai_request", clear_on_submit=True):
+            new_req = st.text_area("Thêm yêu cầu AI mới", height=110, key=f"{act}_new_ai_req_text")
+            make_active = st.checkbox("Kích hoạt ngay", value=True, key=f"{act}_new_ai_req_active")
+            if st.form_submit_button("TẠO YÊU CẦU AI"):
+                if not new_req.strip():
+                    st.warning("Vui lòng nhập yêu cầu AI.")
+                else:
+                    now = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+                    rid = make_new_ai_request_id(bank)
+                    bank["requests"].append({"id": rid, "text": new_req.strip(), "created_at": now, "updated_at": now})
+                    if make_active:
+                        bank["active_id"] = rid
+                    save_ai_request_bank(cid, act, bank)
+                    st.toast("Đã tạo yêu cầu AI.")
+                    st.rerun()
+
+        labels = [f"{r['id']} — {r['text'][:120]}{'...' if len(r['text'])>120 else ''}" for r in bank.get("requests", [])]
+        if labels:
+            idx = max(0, next((i for i, label in enumerate(labels) if label.startswith(str(bank.get('active_id', 'AI1')) + ' —')), 0))
+            pick = st.selectbox("Chọn yêu cầu AI để kích hoạt", labels, index=idx, key=f"{act}_ai_req_pick")
+            if st.button("KÍCH HOẠT YÊU CẦU AI", key=f"{act}_ai_req_activate"):
+                bank["active_id"] = pick.split(" —", 1)[0].strip()
+                save_ai_request_bank(cid, act, bank)
+                st.toast("Đã kích hoạt yêu cầu AI.")
+                st.rerun()
+            if st.button("CẬP NHẬT YÊU CẦU ACTIVE TỪ Ô SOẠN", key=f"{act}_ai_req_update_active"):
+                edited = st.session_state.get(f"{act}_ai_prompt_runtime", "").strip()
+                if not edited:
+                    st.warning("Ô soạn yêu cầu AI đang trống.")
+                else:
+                    for r in bank.get("requests", []):
+                        if r.get("id") == bank.get("active_id"):
+                            r["text"] = edited
+                            r["updated_at"] = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+                    save_ai_request_bank(cid, act, bank)
+                    st.toast("Đã cập nhật yêu cầu AI active.")
+                    st.rerun()
+
+def describe_activity_setup(cid: str, act: str, qtext: str, cfg: dict | None = None) -> str:
+    cfg = cfg or load_activity_config(cid, act)
+    lines = []
+    if act == "wordcloud":
+        bank = load_bank(cid, "wc", qtext or cfg.get("question", ""))
+        active = get_active_question(bank, qtext or cfg.get("question", ""))
+        lines.append(f"Câu hỏi đang kích hoạt: {active.get('id')} — {active.get('text', '')}")
+        lines.append("Ngân hàng câu hỏi:")
+        for q in bank.get("questions", []):
+            mark = " [ACTIVE]" if q.get("id") == bank.get("active_id") else ""
+            lines.append(f"- {q.get('id')}{mark}: {q.get('text', '')}")
+    elif act == "openended":
+        bank = load_bank(cid, "oe", qtext or cfg.get("question", ""))
+        active = get_active_question(bank, qtext or cfg.get("question", ""))
+        lines.append(f"Câu hỏi đang kích hoạt: {active.get('id')} — {active.get('text', '')}")
+        lines.append("Ngân hàng câu hỏi:")
+        for q in bank.get("questions", []):
+            mark = " [ACTIVE]" if q.get("id") == bank.get("active_id") else ""
+            lines.append(f"- {q.get('id')}{mark}: {q.get('text', '')}")
+    else:
+        lines.append(f"Câu hỏi/vấn đề: {cfg.get('question', '')}")
+        if act == "poll":
+            lines.append("Phương án trả lời:")
+            lines += [f"- {x}" for x in cfg.get("options", [])]
+        elif act == "scales":
+            lines.append("Tiêu chí thang đo:")
+            lines += [f"- {x}" for x in cfg.get("criteria", [])]
+        elif act == "ranking":
+            lines.append("Các mục xếp hạng:")
+            lines += [f"- {x}" for x in cfg.get("items", [])]
+        elif act == "pin":
+            lines.append(f"Ảnh/sơ đồ: {cfg.get('image', '')}")
+            lines.append("Vùng/điểm lựa chọn:")
+            lines += [f"- {x}" for x in cfg.get("zones", [])]
+    return "\n".join(lines)
+
 def render_activity_settings(cid: str, act: str, cfg: dict, active_q_text: str | None = None):
     with st.expander("⚙️ Thiết lập hoạt động (chỉ giảng viên)", expanded=False):
         enabled = st.toggle("Kích hoạt hoạt động cho học viên", value=bool(cfg.get("enabled", True)), key=f"set_enabled_{act}")
@@ -521,8 +666,7 @@ def render_activity_settings(cid: str, act: str, cfg: dict, active_q_text: str |
             new_cfg["image"] = image.strip() or MAP_IMAGE
             new_cfg["zones"] = _normalize_list(zones, [])[:20]
 
-        ai_prompt = st.text_area("Prompt AI mặc định cho giảng viên", value=cfg.get("ai_prompt", DEFAULT_AI_PROMPTS.get(act, "")), height=130, key=f"ai_prompt_editor_{act}")
-        new_cfg["ai_prompt"] = ai_prompt.strip()
+        st.caption("Yêu cầu AI không còn cố định tại đây. Giảng viên quản lý nhiều yêu cầu AI trong mục 🤖 AI phân tích và kích hoạt yêu cầu cần dùng.")
 
         c1, c2 = st.columns(2)
         with c1:
@@ -601,12 +745,17 @@ def render_ai_panel(cid: str, act: str, qtext: str, df: pd.DataFrame, payload_bu
     with st.expander("🤖 AI phân tích câu trả lời học viên (chỉ giảng viên)", expanded=True):
         st.caption("AI chỉ chạy khi giảng viên bấm PHÂN TÍCH NGAY; học viên không gọi API.")
 
+        ai_bank = load_ai_request_bank(cid, act, cfg.get("ai_prompt", DEFAULT_AI_PROMPTS.get(act, "")))
+        active_ai_request = get_active_ai_request(ai_bank, DEFAULT_AI_PROMPTS.get(act, ""))
         prompt = st.text_area(
-            "Prompt truy vấn AI",
-            value=cfg.get("ai_prompt", DEFAULT_AI_PROMPTS.get(act, "")),
+            "Yêu cầu AI đang kích hoạt",
+            value=active_ai_request.get("text", ""),
             height=130,
             key=f"{act}_ai_prompt_runtime",
+            help="Có thể chỉnh nhanh tại đây. Muốn lưu lại nội dung chỉnh sửa, mở Ngân hàng yêu cầu AI và bấm CẬP NHẬT YÊU CẦU ACTIVE TỪ Ô SOẠN.",
         )
+        st.caption(f"Đang dùng yêu cầu AI: {active_ai_request.get('id', 'AI1')}")
+        render_ai_request_bank_manager(cid, act, ai_bank)
 
         extra_lines = []
         if act == "poll" and cfg.get("options"):
@@ -617,7 +766,11 @@ def render_ai_panel(cid: str, act: str, qtext: str, df: pd.DataFrame, payload_bu
             extra_lines.append("Các mục xếp hạng:\n" + "\n".join([f"- {x}" for x in cfg.get("items", [])]))
         elif act == "pin" and cfg.get("zones"):
             extra_lines.append("Vùng/điểm lựa chọn:\n" + "\n".join([f"- {x}" for x in cfg.get("zones", [])]))
-        export_text = build_external_ai_export(cid, act, qtext, df, prompt, extra_context="\n\n".join(extra_lines))
+        question_context = describe_activity_setup(cid, act, qtext, cfg)
+        extra_context_parts = [question_context]
+        if extra_lines:
+            extra_context_parts.append("\n\n".join(extra_lines))
+        export_text = build_external_ai_export(cid, act, qtext, df, prompt, extra_context="\n\n".join(extra_context_parts))
         export_filename = f"phan_tich_{safe_filename_part(class_display_name(cid))}_{safe_filename_part(ACT_LABELS.get(act, act))}_{datetime.now().strftime('%Y%m%d_%H%M%S')}.md"
         st.download_button(
             "⬇️ Tải file dữ liệu để đưa vào ChatGPT/AI khác",
@@ -625,7 +778,7 @@ def render_ai_panel(cid: str, act: str, qtext: str, df: pd.DataFrame, payload_bu
             file_name=export_filename,
             mime="text/markdown",
             key=f"{act}_download_external_ai_file",
-            help="File gồm: tên lớp, câu hỏi/vấn đề đang kích hoạt, yêu cầu AI phân tích của giảng viên và toàn bộ phản hồi học viên hiện có.",
+            help="File gồm: dữ liệu câu hỏi/cấu hình hoạt động, dữ liệu trả lời theo lớp học và yêu cầu AI đang kích hoạt.",
         )
 
         model_name = st.selectbox(
@@ -1369,12 +1522,8 @@ TÓM TẮT DỮ LIỆU:
 YÊU CẦU:
 {prompt}
 
-Trả lời theo cấu trúc:
-1) Insights chính
-2) Nhóm chủ đề + ví dụ
-3) Hiểu lầm có thể có + cách chỉnh
-4) Can thiệp sư phạm
-5) Câu hỏi gợi mở
+CÁCH TRẢ LỜI:
+Bám sát yêu cầu AI đang kích hoạt của giảng viên. Không ép theo khuôn số lượng cố định; chỉ nêu những điểm thật sự có căn cứ từ dữ liệu.
 """
         render_ai_panel(cid, "wordcloud", qtext, df, _wc_payload)
 
@@ -1518,12 +1667,8 @@ DỮ LIỆU PHẢN HỒI:
 YÊU CẦU:
 {prompt}
 
-Trả lời theo cấu trúc:
-1) Tóm tắt chủ đề nổi bật
-2) Phân loại quan điểm/lập luận
-3) Trích dẫn minh họa ngắn, nêu tên nếu có
-4) 3 can thiệp sư phạm
-5) 3 câu hỏi gợi mở
+CÁCH TRẢ LỜI:
+Bám sát yêu cầu AI đang kích hoạt của giảng viên. Không ép theo khuôn số lượng cố định; chỉ nêu những điểm thật sự có căn cứ từ dữ liệu.
 """
         render_ai_panel(cid, "openended", qtext, df, _oe_payload)
 
