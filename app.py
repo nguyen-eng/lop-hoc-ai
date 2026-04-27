@@ -194,6 +194,95 @@ def save_row(cid: str, act: str, name: str, content: str, suffix: str = ""):
         with open(path, "a", encoding="utf-8") as f:
             f.write(row)
 
+
+def class_display_name(cid: str) -> str:
+    """Return the human-readable class name from class id."""
+    return next((k for k, v in CLASSES.items() if v == cid), cid)
+
+
+def safe_filename_part(text: str) -> str:
+    """Make a Vietnamese-friendly but filesystem-safe file name segment."""
+    text = str(text or "").strip()
+    text = re.sub(r"\s+", "_", text)
+    text = re.sub(r"[^\w\-\u00C0-\u1EF9]+", "", text, flags=re.UNICODE)
+    return text[:80] or "du_lieu"
+
+
+def build_external_ai_export(
+    cid: str,
+    act: str,
+    qtext: str,
+    df: pd.DataFrame,
+    ai_prompt: str,
+    extra_context: str = "",
+) -> str:
+    """
+    Build a self-contained Markdown package for teachers to upload to ChatGPT or another AI.
+    Includes class name, active activity/question, teacher AI instruction, and learner responses.
+    """
+    cls_name = class_display_name(cid)
+    act_name = ACT_LABELS.get(act, act)
+    exported_at = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+
+    if df is None or df.empty:
+        data_block = "Chưa có dữ liệu phản hồi của học viên."
+        total = 0
+        unique_students = 0
+    else:
+        export_df = df.copy()
+        for col in ["Học viên", "Nội dung", "Thời gian"]:
+            if col not in export_df.columns:
+                export_df[col] = ""
+        export_df = export_df[["Học viên", "Nội dung", "Thời gian"]].fillna("")
+        total = int(len(export_df))
+        unique_students = int(export_df["Học viên"].astype(str).str.strip().replace("", pd.NA).dropna().nunique())
+        data_block = export_df.to_markdown(index=False)
+
+    ai_prompt = str(ai_prompt or "").strip()
+    if not ai_prompt:
+        ai_prompt = "Giảng viên chưa nhập yêu cầu AI phân tích riêng. Hãy phân tích dữ liệu theo hướng sư phạm, chỉ ra xu hướng, hiểu lầm, điểm mạnh/yếu và gợi ý can thiệp trên lớp."
+
+    qtext = str(qtext or "").strip() or "Chưa thiết lập câu hỏi/vấn đề."
+    extra_context = str(extra_context or "").strip()
+
+    parts = [
+        "# GÓI DỮ LIỆU PHÂN TÍCH PHẢN HỒI HỌC VIÊN",
+        "",
+        "## 1. Thông tin lớp học và hoạt động",
+        f"- Lớp học: {cls_name}",
+        f"- Mã lớp: {cid}",
+        f"- Hoạt động: {act_name}",
+        f"- Thời điểm trích xuất: {exported_at}",
+        f"- Tổng lượt phản hồi: {total}",
+        f"- Số học viên tham gia: {unique_students}",
+        "",
+        "## 2. Câu hỏi/vấn đề đang kích hoạt",
+        qtext,
+        "",
+    ]
+    if extra_context:
+        parts.extend(["## 3. Bối cảnh/cấu hình bổ sung", extra_context, ""])
+        prompt_heading = "## 4. Yêu cầu AI phân tích của giảng viên"
+        data_heading = "## 5. Dữ liệu phản hồi của học viên"
+        final_heading = "## 6. Nhiệm vụ cho AI nhận file này"
+    else:
+        prompt_heading = "## 3. Yêu cầu AI phân tích của giảng viên"
+        data_heading = "## 4. Dữ liệu phản hồi của học viên"
+        final_heading = "## 5. Nhiệm vụ cho AI nhận file này"
+
+    parts.extend([
+        prompt_heading,
+        ai_prompt,
+        "",
+        data_heading,
+        data_block,
+        "",
+        final_heading,
+        "Hãy phân tích trực tiếp dữ liệu trên theo đúng yêu cầu của giảng viên; ưu tiên nhận diện xu hướng nhận thức, phân nhóm câu trả lời, phát hiện hiểu lầm/sai lệch, chọn ví dụ tiêu biểu và đề xuất can thiệp sư phạm khả thi ngay trên lớp.",
+        "",
+    ])
+    return "\n".join(parts)
+
 def _read_csv(cid: str, act: str, suffix: str = "") -> pd.DataFrame:
     path = get_path(cid, act, suffix)
     if not os.path.exists(path):
@@ -505,6 +594,26 @@ def render_ai_panel(cid: str, act: str, qtext: str, df: pd.DataFrame, payload_bu
             value=cfg.get("ai_prompt", DEFAULT_AI_PROMPTS.get(act, "")),
             height=130,
             key=f"{act}_ai_prompt_runtime",
+        )
+
+        extra_lines = []
+        if act == "poll" and cfg.get("options"):
+            extra_lines.append("Phương án trả lời:\n" + "\n".join([f"- {x}" for x in cfg.get("options", [])]))
+        elif act == "scales" and cfg.get("criteria"):
+            extra_lines.append("Tiêu chí thang đo:\n" + "\n".join([f"- {x}" for x in cfg.get("criteria", [])]))
+        elif act == "ranking" and cfg.get("items"):
+            extra_lines.append("Các mục xếp hạng:\n" + "\n".join([f"- {x}" for x in cfg.get("items", [])]))
+        elif act == "pin" and cfg.get("zones"):
+            extra_lines.append("Vùng/điểm lựa chọn:\n" + "\n".join([f"- {x}" for x in cfg.get("zones", [])]))
+        export_text = build_external_ai_export(cid, act, qtext, df, prompt, extra_context="\n\n".join(extra_lines))
+        export_filename = f"phan_tich_{safe_filename_part(class_display_name(cid))}_{safe_filename_part(ACT_LABELS.get(act, act))}_{datetime.now().strftime('%Y%m%d_%H%M%S')}.md"
+        st.download_button(
+            "⬇️ Tải file dữ liệu để đưa vào ChatGPT/AI khác",
+            data=export_text.encode("utf-8-sig"),
+            file_name=export_filename,
+            mime="text/markdown",
+            key=f"{act}_download_external_ai_file",
+            help="File gồm: tên lớp, câu hỏi/vấn đề đang kích hoạt, yêu cầu AI phân tích của giảng viên và toàn bộ phản hồi học viên hiện có.",
         )
 
         model_name = st.selectbox(
