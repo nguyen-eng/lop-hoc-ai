@@ -1160,71 +1160,123 @@ def build_wordcloud_html(words_json: str, height_px: int = 520, fullscreen_butto
 """
 
 
-def build_wordcloud_fullscreen_launcher(words_json: str) -> str:
-    """One-click real fullscreen launcher for teacher wordcloud."""
-    return f"""
+def build_wordcloud_fullscreen_launcher(words_json: str, channel_id: str = "default") -> str:
+    """Open WordCloud in a separate browser window and keep it live via BroadcastChannel.
+
+    Fullscreen inside Streamlit's iframe is destroyed whenever Streamlit reruns
+    (for example when live refresh detects new student answers). A separate window is
+    not replaced by Streamlit reruns, so it does not flash/turn black. Each rerun only
+    broadcasts the newest word list to the already-open fullscreen window.
+    """
+    channel_safe = re.sub(r"[^a-zA-Z0-9_-]", "_", str(channel_id or "default"))
+    html = r'''
 <!doctype html>
 <html>
 <head>
   <meta charset="utf-8"/>
   <style>
-    html, body {{ margin:0; padding:0; background:transparent; font-family: system-ui, -apple-system, Segoe UI, Roboto, Arial, sans-serif; }}
-    #launch {{ border:0; border-radius:14px; padding:14px 18px; background:#047857; color:white; font-weight:900; font-size:15px; box-shadow:0 10px 26px rgba(0,0,0,.22); cursor:pointer; }}
-    #launch:hover {{ filter:brightness(1.06); }}
-    #stage {{ display:none; background:#fff; width:100vw; height:100vh; overflow:hidden; position:relative; }}
-    #wc-wrap {{ width:100vw; height:100vh; background:#fff; overflow:hidden; }}
-    #exit {{ display:none; position:fixed; right:18px; bottom:18px; z-index:9999; border:0; border-radius:14px; padding:12px 16px; background:#111827; color:white; font-weight:800; cursor:pointer; box-shadow:0 10px 26px rgba(0,0,0,.26); }}
-    body.is-fs #stage {{ display:block; }}
-    body.is-fs #exit {{ display:block; }}
-    body.is-fs #launch {{ display:none; }}
-    .word {{ font-family:'Montserrat', system-ui, -apple-system, Segoe UI, Roboto, Arial, sans-serif; font-weight:800; user-select:none; paint-order:stroke; stroke:rgba(255,255,255,0.85); stroke-width:2px; }}
+    html, body { margin:0; padding:0; background:transparent; font-family: system-ui, -apple-system, Segoe UI, Roboto, Arial, sans-serif; }
+    #launch { border:0; border-radius:14px; padding:14px 18px; background:#047857; color:white; font-weight:900; font-size:15px; box-shadow:0 10px 26px rgba(0,0,0,.22); cursor:pointer; }
+    #launch:hover { filter:brightness(1.06); }
+    #hint { margin-left:10px; color:#475569; font-size:13px; }
   </style>
 </head>
 <body>
-  <button id="launch" type="button">🖥 Fullscreen Wordcloud</button>
-  <div id="stage"><div id="wc-wrap"></div><button id="exit" type="button">ĐÓNG FULLSCREEN</button></div>
-  <script src="https://cdn.jsdelivr.net/npm/d3@7/dist/d3.min.js"></script>
-  <script src="https://cdn.jsdelivr.net/npm/d3-cloud@1/build/d3.layout.cloud.js"></script>
+  <button id="launch" type="button">🖥 Mở WordCloud trình chiếu</button><span id="hint"></span>
+
   <script>
-    const data = {words_json};
-    function mulberry32(a) {{ return function() {{ var t = a += 0x6D2B79F5; t = Math.imul(t ^ t >>> 15, t | 1); t ^= t + Math.imul(t ^ t >>> 7, t | 61); return ((t ^ t >>> 14) >>> 0) / 4294967296; }} }}
-    const rng = mulberry32(42);
-    function hashHue(str) {{ let h = 5381; for (let i=0;i<str.length;i++) {{ h = ((h << 5) + h) + str.charCodeAt(i); h = h & 0xffffffff; }} return Math.abs(h) % 360; }}
-    function getSizeScale(vals) {{ const vmin = Math.max(1, d3.min(vals)); const vmax = Math.max(1, d3.max(vals)); if (vmax === vmin) return () => 58; return d3.scaleSqrt().domain([vmin, vmax]).range([30, 132]).clamp(true); }}
-    function render() {{
+    const CHANNEL_NAME = "wc_fullscreen___CHANNEL__";
+    const initialData = __DATA__;
+    const bc = ("BroadcastChannel" in window) ? new BroadcastChannel(CHANNEL_NAME) : null;
+
+    function broadcastLatest() {
+      try { if (bc) bc.postMessage({type:"WC_DATA", data: initialData}); } catch(e) {}
+    }
+    broadcastLatest();
+    setTimeout(broadcastLatest, 300);
+
+    function popupHtml(channelName, data) {
+      const dataText = JSON.stringify(data).replace(/</g, "\\u003c");
+      return `<!doctype html>
+<html>
+<head>
+<meta charset="utf-8"/>
+<title>WordCloud trình chiếu</title>
+<style>
+  html, body { margin:0; width:100%; height:100%; background:#fff; overflow:hidden; font-family:system-ui,-apple-system,Segoe UI,Roboto,Arial,sans-serif; }
+  #wc-wrap { width:100vw; height:100vh; background:#fff; overflow:hidden; }
+  #exit { position:fixed; right:18px; bottom:18px; z-index:9999; border:0; border-radius:14px; padding:12px 16px; background:#111827; color:white; font-weight:800; cursor:pointer; box-shadow:0 10px 26px rgba(0,0,0,.26); opacity:.82; }
+  #exit:hover { opacity:1; }
+  #status { position:fixed; left:18px; bottom:18px; z-index:9999; color:#64748b; background:rgba(255,255,255,.8); padding:8px 10px; border-radius:10px; font-size:13px; }
+  .word { font-family:'Montserrat',system-ui,-apple-system,Segoe UI,Roboto,Arial,sans-serif; font-weight:800; user-select:none; paint-order:stroke; stroke:rgba(255,255,255,0.85); stroke-width:2px; }
+</style>
+</head>
+<body>
+  <div id="wc-wrap"></div>
+  <button id="exit" type="button">ĐÓNG TRÌNH CHIẾU</button>
+  <div id="status">Đang nhận dữ liệu trực tiếp…</div>
+  <script src="https://cdn.jsdelivr.net/npm/d3@7/dist/d3.min.js"><\/script>
+  <script src="https://cdn.jsdelivr.net/npm/d3-cloud@1/build/d3.layout.cloud.js"><\/script>
+  <script>
+    let data = ${dataText};
+    let seed = 42;
+    function mulberry32(a) { return function() { var t = a += 0x6D2B79F5; t = Math.imul(t ^ t >>> 15, t | 1); t ^= t + Math.imul(t ^ t >>> 7, t | 61); return ((t ^ t >>> 14) >>> 0) / 4294967296; } }
+    function hashHue(str) { let h = 5381; for (let i=0;i<str.length;i++) { h = ((h << 5) + h) + str.charCodeAt(i); h = h & 0xffffffff; } return Math.abs(h) % 360; }
+    function getSizeScale(vals) { const vmin = Math.max(1, d3.min(vals) || 1); const vmax = Math.max(1, d3.max(vals) || 1); if (vmax === vmin) return () => 58; return d3.scaleSqrt().domain([vmin, vmax]).range([30, 132]).clamp(true); }
+    function render() {
       const wrap = document.getElementById('wc-wrap');
       const W = Math.max(720, Math.floor(window.innerWidth || 1200));
       const H = Math.max(420, Math.floor(window.innerHeight || 800));
       wrap.innerHTML = '';
-      const svg = d3.select('#wc-wrap').append('svg').attr('viewBox', `0 0 ${{W}} ${{H}}`).attr('preserveAspectRatio', 'xMidYMid meet');
+      if (!data || data.length === 0) return;
+      const svg = d3.select('#wc-wrap').append('svg').attr('viewBox', `0 0 ${W} ${H}`).attr('preserveAspectRatio', 'xMidYMid meet');
       const g = svg.append('g');
       const vals = data.map(d => d.value);
       const fontScale = getSizeScale(vals);
-      const words = data.slice().sort((a,b) => d3.descending(a.value, b.value)).map(d => {{ const hue = hashHue(d.text); return {{ text:d.text, value:d.value, size:Math.round(fontScale(d.value)), rotate:0, color:`hsl(${{hue}}, 84%, 50%)`, __key:d.text }}; }});
+      const rng = mulberry32(seed++);
+      const words = data.slice().sort((a,b) => d3.descending(a.value, b.value)).map(d => { const hue = hashHue(d.text); return { text:d.text, value:d.value, size:Math.round(fontScale(d.value)), rotate:0, color:`hsl(${hue}, 84%, 50%)`, __key:d.text }; });
       const layout = d3.layout.cloud().size([W,H]).words(words).padding(16).spiral('archimedean').rotate(d => d.rotate).font('Montserrat').fontSize(d => d.size).random(() => rng());
-      layout.on('end', placed => {{
+      layout.on('end', placed => {
         if (!placed || placed.length === 0) return;
         let minX=Infinity,maxX=-Infinity,minY=Infinity,maxY=-Infinity;
-        placed.forEach(w => {{ const x0=w.x-(w.width||0)/2, x1=w.x+(w.width||0)/2, y0=w.y-(w.height||0)/2, y1=w.y+(w.height||0)/2; if(x0<minX)minX=x0; if(x1>maxX)maxX=x1; if(y0<minY)minY=y0; if(y1>maxY)maxY=y1; }});
+        placed.forEach(w => { const x0=w.x-(w.width||0)/2, x1=w.x+(w.width||0)/2, y0=w.y-(w.height||0)/2, y1=w.y+(w.height||0)/2; if(x0<minX)minX=x0; if(x1>maxX)maxX=x1; if(y0<minY)minY=y0; if(y1>maxY)maxY=y1; });
         const bw=Math.max(1,maxX-minX), bh=Math.max(1,maxY-minY), cx=(minX+maxX)/2, cy=(minY+maxY)/2;
         const s=Math.min((W*.92)/bw,(H*.92)/bh);
-        g.attr('transform', `translate(${{W/2}},${{H/2}}) scale(${{s}}) translate(${{-cx}},${{-cy}})`);
-        g.selectAll('text.word').data(placed, d => d.__key).enter().append('text').attr('class','word').attr('text-anchor','middle').style('fill', d => d.color).style('font-size', d => `${{d.size}}px`).text(d => d.text).attr('transform', d => `translate(${{d.x}},${{d.y}}) rotate(${{d.rotate}})`);
-      }});
+        g.attr('transform', `translate(${W/2},${H/2}) scale(${s}) translate(${-cx},${-cy})`);
+        g.selectAll('text.word').data(placed, d => d.__key).enter().append('text').attr('class','word').attr('text-anchor','middle').style('fill', d => d.color).style('font-size', d => `${d.size}px`).text(d => d.text).attr('transform', d => `translate(${d.x},${d.y}) rotate(${d.rotate})`);
+      });
       layout.start();
-    }}
-    async function startFullscreen() {{
-      try {{ await document.documentElement.requestFullscreen(); document.body.classList.add('is-fs'); setTimeout(render, 150); }}
-      catch(e) {{ document.body.classList.add('is-fs'); document.getElementById('launch').textContent = 'Trình duyệt chặn fullscreen - thử F11/Ctrl+Cmd+F'; setTimeout(render, 150); }}
-    }}
-    document.getElementById('launch').addEventListener('click', startFullscreen);
-    document.getElementById('exit').addEventListener('click', async () => {{ if (document.fullscreenElement) await document.exitFullscreen(); }});
-    document.addEventListener('fullscreenchange', () => {{ const on = !!document.fullscreenElement; document.body.classList.toggle('is-fs', on); if (on) setTimeout(render, 150); }});
-    window.addEventListener('resize', () => {{ if (document.body.classList.contains('is-fs')) {{ clearTimeout(window.__wc_t); window.__wc_t = setTimeout(render, 180); }} }});
+    }
+    const bc2 = ('BroadcastChannel' in window) ? new BroadcastChannel(channelName) : null;
+    if (bc2) bc2.onmessage = (ev) => { if (ev.data && ev.data.type === 'WC_DATA') { data = ev.data.data || []; document.getElementById('status').textContent = 'Đã cập nhật: ' + new Date().toLocaleTimeString(); render(); } };
+    document.getElementById('exit').addEventListener('click', () => { try { window.close(); } catch(e) {} });
+    window.addEventListener('resize', () => { clearTimeout(window.__wc_t); window.__wc_t = setTimeout(render, 180); });
+    render();
+  <\/script>
+</body>
+</html>`;
+    }
+
+    document.getElementById('launch').addEventListener('click', async () => {
+      const w = window.open('', 'wc_fullscreen___CHANNEL__', 'popup=yes,width=1400,height=900');
+      if (!w) {
+        document.getElementById('hint').textContent = 'Trình duyệt đang chặn popup. Hãy cho phép popup rồi bấm lại.';
+        return;
+      }
+      w.document.open();
+      w.document.write(popupHtml(CHANNEL_NAME, initialData));
+      w.document.close();
+      w.focus();
+      try { await w.document.documentElement.requestFullscreen(); } catch(e) {
+        document.getElementById('hint').textContent = 'Đã mở cửa sổ riêng. Có thể bấm nút xanh/toàn màn hình của trình duyệt nếu cần.';
+      }
+      setTimeout(broadcastLatest, 500);
+    });
   </script>
 </body>
 </html>
-"""
+'''
+    return html.replace("__CHANNEL__", channel_safe).replace("__DATA__", words_json)
 
 def open_wc_fullscreen_dialog(wc_html: str, live: bool, wc_full_html: str | None = None):
     """Teacher-only fullscreen wordcloud."""
@@ -1553,7 +1605,7 @@ def render_activity():
                     # One-click real fullscreen: Fullscreen API must be called directly
                     # by a browser click event, not after a Streamlit rerun.
                     st.components.v1.html(
-                        build_wordcloud_fullscreen_launcher(json.dumps(payload, ensure_ascii=False)),
+                        build_wordcloud_fullscreen_launcher(json.dumps(payload, ensure_ascii=False), channel_id=f"{cid}_{qid}"),
                         height=64,
                         scrolling=False,
                     )
