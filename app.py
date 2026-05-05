@@ -89,11 +89,20 @@ div.stButton > button:hover {{ background-color: #00503a; }}
 }}
 .note-card {{
   background: #fff;
+  color: #111827 !important;
   padding: 14px 14px;
   border-radius: 14px;
   border-left: 6px solid {PRIMARY_COLOR};
   margin-bottom: 10px;
   box-shadow: 0 2px 10px rgba(0,0,0,0.06);
+}}
+.note-card, .note-card * {{
+  color: #111827 !important;
+  opacity: 1 !important;
+}}
+.note-card b {{
+  color: #006a4e !important;
+  font-weight: 800;
 }}
 .small-muted {{ color: {MUTED}; font-weight: 700; }}
 </style>
