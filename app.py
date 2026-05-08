@@ -1212,8 +1212,9 @@ def build_wordcloud_fullscreen_launcher(words_json: str, channel_id: str = "defa
 <head>
   <meta charset="utf-8"/>
   <style>
-    html, body { margin:0; padding:0; background:transparent; font-family: system-ui, -apple-system, Segoe UI, Roboto, Arial, sans-serif; }
-    #launch { border:0; border-radius:14px; padding:14px 18px; background:#047857; color:white; font-weight:900; font-size:15px; box-shadow:0 10px 26px rgba(0,0,0,.22); cursor:pointer; }
+    html, body { margin:0; padding:0; width:100%; height:72px; overflow:hidden; background:transparent; font-family: system-ui, -apple-system, Segoe UI, Roboto, Arial, sans-serif; }
+    body { pointer-events:auto; }
+    #launch { position:relative; z-index:9999; border:0; border-radius:14px; padding:14px 18px; background:#047857; color:white; font-weight:900; font-size:15px; box-shadow:0 10px 26px rgba(0,0,0,.22); cursor:pointer; pointer-events:auto; -webkit-tap-highlight-color: transparent; touch-action: manipulation; }
     #launch:hover { filter:brightness(1.06); }
     #hint { margin-left:10px; color:#475569; font-size:13px; }
   </style>
@@ -1642,7 +1643,7 @@ def render_activity():
             else:
                 items = sorted(freq.items(), key=lambda x: x[1], reverse=True)[:80]
                 payload = [{"text": k, "value": int(v)} for k, v in items]
-                wc_html = build_wordcloud_html(json.dumps(payload, ensure_ascii=False), height_px=520)
+                wc_html = build_wordcloud_html(json.dumps(payload, ensure_ascii=False), height_px=520, fullscreen_button=True)
                 st.components.v1.html(wc_html, height=540, scrolling=False)
 
                 c1, c2, c3 = st.columns([2, 2, 2])
@@ -1651,7 +1652,7 @@ def render_activity():
                     # by a browser click event, not after a Streamlit rerun.
                     st.components.v1.html(
                         build_wordcloud_fullscreen_launcher(json.dumps(payload, ensure_ascii=False), channel_id=f"{cid}_{qid}"),
-                        height=64,
+                        height=86,
                         scrolling=False,
                     )
                 with c2:
