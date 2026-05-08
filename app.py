@@ -14,6 +14,7 @@ import time
 import threading
 import copy
 import hashlib
+import html
 from datetime import datetime
 
 import streamlit as st
@@ -104,6 +105,22 @@ div.stButton > button:hover {{ background-color: #00503a; }}
   color: #006a4e !important;
   font-weight: 800;
 }}
+/* Fix OpenEnded cards in dark mode: force readable text inside Streamlit markdown/html containers */
+div[data-testid="stMarkdownContainer"] .note-card,
+div[data-testid="stMarkdownContainer"] .note-card * {{
+  color: #111827 !important;
+  -webkit-text-fill-color: #111827 !important;
+  opacity: 1 !important;
+  text-shadow: none !important;
+  mix-blend-mode: normal !important;
+}}
+div[data-testid="stMarkdownContainer"] .note-card {{
+  background: #ffffff !important;
+}}
+div[data-testid="stMarkdownContainer"] .note-card b {{
+  color: #006a4e !important;
+  -webkit-text-fill-color: #006a4e !important;
+}}
 .small-muted {{ color: {MUTED}; font-weight: 700; }}
 </style>
 """,
@@ -185,6 +202,17 @@ def safe_text(s: str) -> str:
     s = str(s or "")
     s = s.replace("|", "-").replace("\n", " ").strip()
     return s
+
+
+def render_note_card(name: str, content: str):
+    """Render one OpenEnded answer with forced readable colors and escaped HTML."""
+    safe_name = html.escape(str(name or "").strip())
+    safe_content = html.escape(str(content or "").strip())
+    card_html = f'''<div class="note-card" style="background:#ffffff!important;color:#111827!important;-webkit-text-fill-color:#111827!important;opacity:1!important;">
+              <b style="color:#006a4e!important;-webkit-text-fill-color:#006a4e!important;opacity:1!important;">{safe_name}</b>
+              <span style="color:#111827!important;-webkit-text-fill-color:#111827!important;opacity:1!important;">: {safe_content}</span>
+            </div>'''
+    st.markdown(card_html, unsafe_allow_html=True)
 
 def get_path(cid: str, act: str, suffix: str = "") -> str:
     suffix = str(suffix or "").strip()
@@ -1214,14 +1242,18 @@ def build_wordcloud_fullscreen_launcher(words_json: str, channel_id: str = "defa
 <style>
   html, body { margin:0; width:100%; height:100%; background:#fff; overflow:hidden; font-family:system-ui,-apple-system,Segoe UI,Roboto,Arial,sans-serif; }
   #wc-wrap { width:100vw; height:100vh; background:#fff; overflow:hidden; }
-  #exit { position:fixed; right:18px; bottom:18px; z-index:9999; border:0; border-radius:14px; padding:12px 16px; background:#111827; color:white; font-weight:800; cursor:pointer; box-shadow:0 10px 26px rgba(0,0,0,.26); opacity:.82; }
-  #exit:hover { opacity:1; }
+  #exit, #fs { position:fixed; bottom:18px; z-index:9999; border:0; border-radius:14px; padding:12px 16px; color:white; font-weight:800; cursor:pointer; box-shadow:0 10px 26px rgba(0,0,0,.26); opacity:.82; }
+  #exit { right:18px; background:#111827; }
+  #fs { right:190px; background:#047857; }
+  #exit:hover, #fs:hover { opacity:1; }
   #status { position:fixed; left:18px; bottom:18px; z-index:9999; color:#64748b; background:rgba(255,255,255,.8); padding:8px 10px; border-radius:10px; font-size:13px; }
+  :fullscreen #fs { display:none; }
   .word { font-family:'Montserrat',system-ui,-apple-system,Segoe UI,Roboto,Arial,sans-serif; font-weight:800; user-select:none; paint-order:stroke; stroke:rgba(255,255,255,0.85); stroke-width:2px; }
 </style>
 </head>
 <body>
   <div id="wc-wrap"></div>
+  <button id="fs" type="button">BẬT TOÀN MÀN HÌNH</button>
   <button id="exit" type="button">ĐÓNG TRÌNH CHIẾU</button>
   <div id="status">Đang nhận dữ liệu trực tiếp…</div>
   <script src="https://cdn.jsdelivr.net/npm/d3@7/dist/d3.min.js"><\/script>
@@ -1258,6 +1290,12 @@ def build_wordcloud_fullscreen_launcher(words_json: str, channel_id: str = "defa
     }
     const bc2 = ('BroadcastChannel' in window) ? new BroadcastChannel(channelName) : null;
     if (bc2) bc2.onmessage = (ev) => { if (ev.data && ev.data.type === 'WC_DATA') { data = ev.data.data || []; document.getElementById('status').textContent = 'Đã cập nhật: ' + new Date().toLocaleTimeString(); render(); } };
+    document.getElementById('fs').addEventListener('click', async () => {
+      try { await document.documentElement.requestFullscreen(); }
+      catch(e) { document.getElementById('status').textContent = 'Trình duyệt chặn fullscreen. Hãy dùng nút xanh/toàn màn hình của trình duyệt.'; }
+      setTimeout(render, 250);
+    });
+    document.addEventListener('fullscreenchange', () => { setTimeout(render, 250); });
     document.getElementById('exit').addEventListener('click', () => { try { window.close(); } catch(e) {} });
     window.addEventListener('resize', () => { clearTimeout(window.__wc_t); window.__wc_t = setTimeout(render, 180); });
     render();
@@ -1276,9 +1314,7 @@ def build_wordcloud_fullscreen_launcher(words_json: str, channel_id: str = "defa
       w.document.write(popupHtml(CHANNEL_NAME, initialData));
       w.document.close();
       w.focus();
-      try { await w.document.documentElement.requestFullscreen(); } catch(e) {
-        document.getElementById('hint').textContent = 'Đã mở cửa sổ riêng. Có thể bấm nút xanh/toàn màn hình của trình duyệt nếu cần.';
-      }
+      document.getElementById('hint').textContent = 'Đã mở cửa sổ riêng. Bấm “BẬT TOÀN MÀN HÌNH” trong cửa sổ trình chiếu.';
       setTimeout(broadcastLatest, 500);
     });
   </script>
@@ -1767,7 +1803,7 @@ YÊU CẦU:
                 st.info("Chưa có câu trả lời.")
             else:
                 for _, r in df.tail(120).iterrows():  # limit render
-                    st.markdown(f'<div class="note-card"><b>{r["Học viên"]}</b>: {r["Nội dung"]}</div>', unsafe_allow_html=True)
+                    render_note_card(r["Học viên"], r["Nội dung"])
 
         c1, c2, c3 = st.columns([2, 2, 2])
         with c1:
@@ -2003,7 +2039,7 @@ YÊU CẦU:
 
                 st.markdown("### 🧾 Danh sách ghim (mới nhất)")
                 for _, r in df.tail(80).iterrows():
-                    st.markdown(f'<div class="note-card"><b>{r["Học viên"]}</b>: {r["Nội dung"]}</div>', unsafe_allow_html=True)
+                    render_note_card(r["Học viên"], r["Nội dung"])
 
         if st.button("🧹 Reset Pin"):
             clear_activity(cid, "pin")
