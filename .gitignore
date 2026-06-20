@@ -1,0 +1,15 @@
+__pycache__/
+*.py[cod]
+.DS_Store
+.env
+.venv/
+venv/
+data/
+*.sqlite3
+*.sqlite3-shm
+*.sqlite3-wal
+data_*.csv
+login_tokens.json
+activity_config_*.json
+ai_requests_*.json
+*_questions_*.json

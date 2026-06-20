@@ -15,7 +15,9 @@ import threading
 import copy
 import hashlib
 import html
+import sqlite3
 from datetime import datetime
+from pathlib import Path
 
 import streamlit as st
 import pandas as pd
@@ -47,6 +49,25 @@ PRIMARY_COLOR = "#006a4e"
 BG_COLOR = "#f0f2f5"
 TEXT_COLOR = "#111827"
 MUTED = "#64748b"
+
+APP_BASE_DIR = Path(__file__).resolve().parent
+DATA_DIR = Path(os.getenv("APP_DATA_DIR", str(APP_BASE_DIR / "data"))).expanduser()
+DATA_DIR.mkdir(parents=True, exist_ok=True)
+DB_PATH = DATA_DIR / os.getenv("APP_DB_NAME", "classroom.sqlite3")
+CACHE_TTL_SECONDS = float(os.getenv("APP_CACHE_TTL_SECONDS", "2.5"))
+LIVE_REFRESH_MS = int(os.getenv("APP_LIVE_REFRESH_MS", "3000"))
+MAX_CACHE_ENTRIES = int(os.getenv("APP_MAX_CACHE_ENTRIES", "240"))
+LIVE_REFRESH_SECONDS = max(1.0, LIVE_REFRESH_MS / 1000)
+COURSE_WEB_URL = os.getenv("COURSE_WEB_URL", "").strip()
+
+
+def live_refresh_label() -> str:
+    return f"🔴 Live update ({LIVE_REFRESH_SECONDS:g}s)"
+
+
+def maybe_autorefresh(key: str):
+    if st_autorefresh is not None:
+        st_autorefresh(interval=LIVE_REFRESH_MS, key=key)
 
 # Hide Streamlit chrome
 st.markdown(
@@ -194,9 +215,65 @@ def run_gemini_ai(payload: str, model_name: str = "gemini-2.5-flash-lite") -> tu
         return None, "Lỗi khi gọi Gemini API: " + raw
 
 # ============================================================
-# 2) DATA LAYER (CSV append-only + teacher cached reads)
+# 2) DATA LAYER (SQLite WAL + teacher cached reads)
 # ============================================================
 data_lock = threading.Lock()
+
+
+def app_storage_path(filename: str) -> Path:
+    return DATA_DIR / filename
+
+
+def resolve_existing_storage_path(filename: str) -> Path:
+    """Prefer DATA_DIR but still read legacy files beside app.py."""
+    data_path = DATA_DIR / filename
+    legacy_path = APP_BASE_DIR / filename
+    if data_path.exists():
+        return data_path
+    if legacy_path.exists():
+        return legacy_path
+    return data_path
+
+
+def _connect_db() -> sqlite3.Connection:
+    conn = sqlite3.connect(DB_PATH, timeout=30, check_same_thread=False)
+    conn.execute("PRAGMA journal_mode=WAL;")
+    conn.execute("PRAGMA synchronous=NORMAL;")
+    conn.execute("PRAGMA busy_timeout=5000;")
+    conn.execute("PRAGMA temp_store=MEMORY;")
+    return conn
+
+
+@st.cache_resource(show_spinner=False)
+def ensure_db_ready() -> str:
+    with _connect_db() as conn:
+        conn.execute(
+            """
+            CREATE TABLE IF NOT EXISTS responses (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                cid TEXT NOT NULL,
+                act TEXT NOT NULL,
+                suffix TEXT NOT NULL DEFAULT '',
+                name TEXT NOT NULL,
+                content TEXT NOT NULL,
+                ts TEXT NOT NULL,
+                created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+            )
+            """
+        )
+        conn.execute(
+            """
+            CREATE INDEX IF NOT EXISTS idx_responses_scope
+            ON responses (cid, act, suffix, id)
+            """
+        )
+        conn.execute(
+            """
+            CREATE INDEX IF NOT EXISTS idx_responses_created
+            ON responses (created_at)
+            """
+        )
+    return str(DB_PATH)
 
 def safe_text(s: str) -> str:
     s = str(s or "")
@@ -217,19 +294,96 @@ def render_note_card(name: str, content: str):
 def get_path(cid: str, act: str, suffix: str = "") -> str:
     suffix = str(suffix or "").strip()
     if suffix:
-        return f"data_{cid}_{act}_{suffix}.csv"
-    return f"data_{cid}_{act}.csv"
+        return str(app_storage_path(f"data_{cid}_{act}_{suffix}.csv"))
+    return str(app_storage_path(f"data_{cid}_{act}.csv"))
+
+
+def _legacy_csv_candidates():
+    seen = set()
+    for base in (APP_BASE_DIR, DATA_DIR):
+        for path in base.glob("data_*.csv"):
+            if path in seen:
+                continue
+            seen.add(path)
+            yield path
+
+
+def _read_csv_file(path: Path) -> pd.DataFrame:
+    try:
+        df = pd.read_csv(
+            path,
+            sep="|",
+            header=None,
+            names=["Học viên", "Nội dung", "Thời gian"],
+            dtype=str,
+            engine="python",
+            on_bad_lines="skip",
+        )
+        for c in ["Học viên", "Nội dung", "Thời gian"]:
+            if c not in df.columns:
+                df[c] = ""
+        return df[["Học viên", "Nội dung", "Thời gian"]].fillna("")
+    except Exception:
+        return pd.DataFrame(columns=["Học viên", "Nội dung", "Thời gian"])
+
+
+def _parse_legacy_csv_name(path: Path):
+    m = re.match(r"^data_(?P<cid>[^_]+)_(?P<act>[^_]+)(?:_(?P<suffix>.+))?\.csv$", path.name)
+    if not m:
+        return None
+    return m.group("cid"), m.group("act"), (m.group("suffix") or "")
+
+
+def migrate_legacy_csv_once():
+    marker = DATA_DIR / ".csv_migrated_to_sqlite"
+    if marker.exists():
+        return
+    ensure_db_ready()
+    imported = 0
+    with data_lock:
+        with _connect_db() as conn:
+            for path in _legacy_csv_candidates():
+                parsed = _parse_legacy_csv_name(path)
+                if not parsed:
+                    continue
+                cid, act, suffix = parsed
+                df = _read_csv_file(path)
+                if df.empty:
+                    continue
+                rows = [
+                    (cid, act, suffix, safe_text(r["Học viên"]), safe_text(r["Nội dung"]), safe_text(r["Thời gian"]))
+                    for _, r in df.iterrows()
+                ]
+                conn.executemany(
+                    """
+                    INSERT INTO responses (cid, act, suffix, name, content, ts)
+                    VALUES (?, ?, ?, ?, ?, ?)
+                    """,
+                    rows,
+                )
+                imported += len(rows)
+            marker.write_text(f"imported={imported}\nwhen={datetime.now().isoformat()}\n", encoding="utf-8")
 
 def save_row(cid: str, act: str, name: str, content: str, suffix: str = ""):
     """Append-only write. Students only hit this function."""
     name = safe_text(name)
     content = safe_text(content)
     ts = datetime.now().strftime("%H:%M:%S")
-    row = f"{name}|{content}|{ts}\n"
-    path = get_path(cid, act, suffix)
+    suffix = str(suffix or "").strip()
+    ensure_db_ready()
     with data_lock:
-        with open(path, "a", encoding="utf-8") as f:
-            f.write(row)
+        with _connect_db() as conn:
+            conn.execute(
+                """
+                INSERT INTO responses (cid, act, suffix, name, content, ts)
+                VALUES (?, ?, ?, ?, ?, ?)
+                """,
+                (cid, act, suffix, name, content, ts),
+            )
+    try:
+        load_data_cached.clear()
+    except Exception:
+        pass
 
 
 def class_display_name(cid: str) -> str:
@@ -333,44 +487,45 @@ def build_external_ai_export(
     return "\n".join(parts)
 
 def _read_csv(cid: str, act: str, suffix: str = "") -> pd.DataFrame:
-    path = get_path(cid, act, suffix)
-    if not os.path.exists(path):
-        return pd.DataFrame(columns=["Học viên", "Nội dung", "Thời gian"])
+    migrate_legacy_csv_once()
+    ensure_db_ready()
     try:
-        df = pd.read_csv(
-            path,
-            sep="|",
-            header=None,
-            names=["Học viên", "Nội dung", "Thời gian"],
-            dtype=str,
-            engine="python",
-            on_bad_lines="skip",
-        )
-        # Ensure columns
-        for c in ["Học viên", "Nội dung", "Thời gian"]:
-            if c not in df.columns:
-                df[c] = ""
-        return df[["Học viên", "Nội dung", "Thời gian"]]
+        with _connect_db() as conn:
+            rows = conn.execute(
+                """
+                SELECT name, content, ts
+                FROM responses
+                WHERE cid = ? AND act = ? AND suffix = ?
+                ORDER BY id ASC
+                """,
+                (cid, act, str(suffix or "").strip()),
+            ).fetchall()
+        return pd.DataFrame(rows, columns=["Học viên", "Nội dung", "Thời gian"])
     except Exception:
         return pd.DataFrame(columns=["Học viên", "Nội dung", "Thời gian"])
 
-@st.cache_data(ttl=1.5, show_spinner=False)
+@st.cache_data(ttl=CACHE_TTL_SECONDS, max_entries=MAX_CACHE_ENTRIES, show_spinner=False)
 def load_data_cached(cid: str, act: str, suffix: str = "") -> pd.DataFrame:
-    """Teacher-only usage: cached read to reduce disk thrash during live refresh."""
+    """Teacher-only usage: cached read to reduce database churn during live refresh."""
     return _read_csv(cid, act, suffix)
 
 def clear_activity(cid: str, act: str, suffix: str = ""):
-    path = get_path(cid, act, suffix)
+    ensure_db_ready()
     with data_lock:
-        if os.path.exists(path):
-            os.remove(path)
-    # bust cache
+        with _connect_db() as conn:
+            conn.execute(
+                """
+                DELETE FROM responses
+                WHERE cid = ? AND act = ? AND suffix = ?
+                """,
+                (cid, act, str(suffix or "").strip()),
+            )
     load_data_cached.clear()
 
 # ============================================================
 # 3) AUTH (Token in URL to keep login through reruns)
 # ============================================================
-TOKEN_STORE_PATH = "login_tokens.json"
+TOKEN_STORE_PATH = app_storage_path("login_tokens.json")
 
 def _load_tokens() -> dict:
     if not os.path.exists(TOKEN_STORE_PATH):
@@ -485,7 +640,11 @@ DEFAULT_AI_PROMPTS = {
 DEFAULT_ZONES = ["Bắc","Trung","Nam","Khu vực đông dân","Khu vực trường học","Khu vực công nghiệp","Khác"]
 
 def activity_config_path(cid: str, act: str) -> str:
-    return f"activity_config_{cid}_{act}.json"
+    return str(app_storage_path(f"activity_config_{cid}_{act}.json"))
+
+
+def activity_config_read_path(cid: str, act: str) -> Path:
+    return resolve_existing_storage_path(f"activity_config_{cid}_{act}.json")
 
 def _normalize_list(items, fallback):
     if isinstance(items, str):
@@ -505,7 +664,7 @@ def default_activity_config(cid: str, act: str) -> dict:
 
 def load_activity_config(cid: str, act: str) -> dict:
     base = default_activity_config(cid, act)
-    path = activity_config_path(cid, act)
+    path = activity_config_read_path(cid, act)
     if os.path.exists(path):
         try:
             with open(path, "r", encoding="utf-8") as f:
@@ -538,7 +697,11 @@ def save_activity_config(cid: str, act: str, cfg: dict):
 # 4C) TEACHER-CUSTOMIZABLE AI REQUEST BANK
 # ============================================================
 def ai_request_bank_path(cid: str, act: str) -> str:
-    return f"ai_requests_{cid}_{act}.json"
+    return str(app_storage_path(f"ai_requests_{cid}_{act}.json"))
+
+
+def ai_request_bank_read_path(cid: str, act: str) -> Path:
+    return resolve_existing_storage_path(f"ai_requests_{cid}_{act}.json")
 
 def _seed_ai_request_bank(default_prompt: str):
     now = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
@@ -548,7 +711,7 @@ def _seed_ai_request_bank(default_prompt: str):
     }
 
 def load_ai_request_bank(cid: str, act: str, default_prompt: str = "") -> dict:
-    path = ai_request_bank_path(cid, act)
+    path = ai_request_bank_read_path(cid, act)
     if not os.path.exists(path):
         return _seed_ai_request_bank(default_prompt)
     try:
@@ -913,10 +1076,14 @@ def _seed_bank(default_q: str):
     return {"active_id": "Q1", "questions": [{"id": "Q1", "text": default_q, "created_at": now, "updated_at": now}]}
 
 def bank_path(cid: str, kind: str) -> str:
-    return f"{kind}_questions_{cid}.json"  # kind in {"wc","oe"}
+    return str(app_storage_path(f"{kind}_questions_{cid}.json"))  # kind in {"wc","oe"}
+
+
+def bank_read_path(cid: str, kind: str) -> Path:
+    return resolve_existing_storage_path(f"{kind}_questions_{cid}.json")
 
 def load_bank(cid: str, kind: str, default_q: str) -> dict:
-    path = bank_path(cid, kind)
+    path = bank_read_path(cid, kind)
     if not os.path.exists(path):
         return _seed_bank(default_q)
     try:
@@ -1330,7 +1497,7 @@ def open_wc_fullscreen_dialog(wc_html: str, live: bool, wc_full_html: str | None
         @_DIALOG_DECORATOR("🖥 Fullscreen Wordcloud")
         def _inner():
             if live and st_autorefresh is not None:
-                st_autorefresh(interval=1500, key="wc_live_refresh_modal")
+                maybe_autorefresh("wc_live_refresh_modal")
             st.components.v1.html(wc_full_html or wc_html, height=880, scrolling=False)
             if st.button("ĐÓNG FULLSCREEN", key="wc_close_full"):
                 st.session_state["wc_fullscreen"] = False
@@ -1339,7 +1506,7 @@ def open_wc_fullscreen_dialog(wc_html: str, live: bool, wc_full_html: str | None
     else:
         st.warning("Streamlit phiên bản hiện tại chưa hỗ trợ dialog. Đang hiển thị chế độ thay thế.")
         if live and st_autorefresh is not None:
-            st_autorefresh(interval=1500, key="wc_live_refresh_modal_fallback")
+            maybe_autorefresh("wc_live_refresh_modal_fallback")
         st.components.v1.html(wc_full_html or wc_html, height=880, scrolling=False)
         if st.button("ĐÓNG FULLSCREEN", key="wc_close_full_fallback"):
             st.session_state["wc_fullscreen"] = False
@@ -1458,6 +1625,8 @@ def render_sidebar():
         if st.button("📚 Danh mục hoạt động"):
             st.session_state["page"] = "class_home"
             st.rerun()
+        if COURSE_WEB_URL:
+            st.link_button("📘 Mở web học liệu", COURSE_WEB_URL)
         if st.session_state["role"] == "teacher":
             if st.button("🏠 Dashboard"):
                 st.session_state["page"] = "dashboard"
@@ -1523,9 +1692,9 @@ def render_dashboard():
 
     st.markdown("## 🏠 Dashboard (Giảng viên)")
 
-    live = st.toggle("🔴 Live update (1.5s)", value=True)
+    live = st.toggle(live_refresh_label(), value=True)
     if live and st_autorefresh is not None:
-        st_autorefresh(interval=1500, key="dash_live")
+        maybe_autorefresh("dash_live")
 
     wc_cfg = load_activity_config(cid, "wordcloud")
     bank_wc = load_bank(cid, "wc", wc_cfg.get("question", ""))
@@ -1628,9 +1797,9 @@ def render_activity():
 
         # TEACHER: full features
         # live refresh optional (teacher-only)
-        live = st.toggle("🔴 Live update (1.5s)", value=True, key="wc_live_teacher")
+        live = st.toggle(live_refresh_label(), value=True, key="wc_live_teacher")
         if live and st_autorefresh is not None:
-            st_autorefresh(interval=1500, key="wc_live_teacher_tick")
+            maybe_autorefresh("wc_live_teacher_tick")
 
         # Load data (cached)
         df = load_data_cached(cid, "wordcloud", suffix=qid)
@@ -1721,9 +1890,9 @@ Bám sát yêu cầu AI đang kích hoạt của giảng viên. Không ép theo 
         # Teacher view
         import plotly.graph_objects as go
 
-        live = st.toggle("🔴 Live update (1.5s)", value=True, key="poll_live_teacher")
+        live = st.toggle(live_refresh_label(), value=True, key="poll_live_teacher")
         if live and st_autorefresh is not None:
-            st_autorefresh(interval=1500, key="poll_live_tick")
+            maybe_autorefresh("poll_live_tick")
 
         df = load_data_cached(cid, "poll")
         with st.container(border=True):
@@ -1794,9 +1963,9 @@ YÊU CẦU:
             return
 
         # Teacher view
-        live = st.toggle("🔴 Live update (1.5s)", value=True, key="oe_live_teacher")
+        live = st.toggle(live_refresh_label(), value=True, key="oe_live_teacher")
         if live and st_autorefresh is not None:
-            st_autorefresh(interval=1500, key="oe_live_tick")
+            maybe_autorefresh("oe_live_tick")
 
         df = load_data_cached(cid, "openended", suffix=qid)
         with st.container(border=True, height=520):
@@ -1868,9 +2037,9 @@ Bám sát yêu cầu AI đang kích hoạt của giảng viên. Không ép theo 
         # Teacher
         import plotly.graph_objects as go
 
-        live = st.toggle("🔴 Live update (1.5s)", value=True, key="sc_live_teacher")
+        live = st.toggle(live_refresh_label(), value=True, key="sc_live_teacher")
         if live and st_autorefresh is not None:
-            st_autorefresh(interval=1500, key="sc_live_tick")
+            maybe_autorefresh("sc_live_tick")
 
         df = load_data_cached(cid, "scales")
         with st.container(border=True):
@@ -1943,9 +2112,9 @@ YÊU CẦU:
         # Teacher
         import plotly.express as px
 
-        live = st.toggle("🔴 Live update (1.5s)", value=True, key="rk_live_teacher")
+        live = st.toggle(live_refresh_label(), value=True, key="rk_live_teacher")
         if live and st_autorefresh is not None:
-            st_autorefresh(interval=1500, key="rk_live_tick")
+            maybe_autorefresh("rk_live_tick")
 
         df = load_data_cached(cid, "ranking")
         with st.container(border=True):
@@ -2018,9 +2187,9 @@ YÊU CẦU:
             return
 
         # Teacher
-        live = st.toggle("🔴 Live update (1.5s)", value=True, key="pin_live_teacher")
+        live = st.toggle(live_refresh_label(), value=True, key="pin_live_teacher")
         if live and st_autorefresh is not None:
-            st_autorefresh(interval=1500, key="pin_live_tick")
+            maybe_autorefresh("pin_live_tick")
 
         df = load_data_cached(cid, "pin")
         with st.container(border=True):

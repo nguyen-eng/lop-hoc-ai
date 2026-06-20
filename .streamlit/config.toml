@@ -1,0 +1,24 @@
+[client]
+showErrorDetails = "type"
+toolbarMode = "minimal"
+
+[server]
+headless = true
+address = "0.0.0.0"
+port = 8501
+fileWatcherType = "none"
+runOnSave = false
+maxUploadSize = 10
+maxMessageSize = 50
+enableStaticServing = false
+disconnectedSessionTTL = 60
+
+[browser]
+gatherUsageStats = false
+
+[theme]
+base = "light"
+primaryColor = "#006a4e"
+backgroundColor = "#f0f2f5"
+secondaryBackgroundColor = "#ffffff"
+textColor = "#111827"
