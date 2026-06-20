@@ -8,6 +8,8 @@ Ban nang cap tap trung vao chay muot hon khi co nhieu hoc vien:
 - Giam live refresh mac dinh tu 1.5 giay xuong 3 giay, co the doi bang `APP_LIVE_REFRESH_MS`.
 - Gioi han cache bang `APP_CACHE_TTL_SECONDS` va `APP_MAX_CACHE_ENTRIES`.
 - Hoc vien van o che do submit-only de tranh moi may hoc vien deu refresh ket qua lop.
+- Web hoc lieu da mo rong thanh 1.240 flashcard, moi noi dung co 40-46 the on tap.
+- Flashcard moi duoc thiet ke theo truy hoi chu dong, dien khuyet, tu giai thich, chong nham lan va lien he tinh huong CAND.
 
 ## Chay local
 
@@ -54,6 +56,17 @@ Thu muc `web/` trong goi san pham co `index.html` da them muc "Lop hoc AI" va `a
 ```text
 ai-classroom.html?app=https%3A%2F%2Fyour-streamlit-app.example.com
 ```
+
+## Flashcard on sau
+
+Trang `web/index.html` tu dong mo rong flashcard tu noi dung giao trinh va ngan hang trac nghiem. Moi bai gom nhieu kieu the:
+
+- Truy hoi khong nhin bai de hoc vien tu goi lai khia niem.
+- Dien khuyet/cau hoi tu giai thich de tang do kho mong muon.
+- The chong nham lan duoc rut tu phuong an sai cua trac nghiem.
+- The lien he CAND de gan ly luan voi hoc tap, ren luyen va xu ly tinh huong.
+
+Thiet ke nay dua tren cac nguyen tac hoc ben lau trong sach `Make It Stick`: retrieval practice, spacing, interleaving, elaboration/generation va feedback.
 
 ## Ghi chu migration
 

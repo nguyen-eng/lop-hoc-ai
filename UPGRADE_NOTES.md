@@ -9,9 +9,15 @@
 5. Giam live refresh mac dinh cua giang vien tu 1.5s xuong 3s, van cho cau hinh qua `APP_LIVE_REFRESH_MS`.
 6. Gom du lieu dong vao `APP_DATA_DIR` de deploy co persistent disk, tranh mat du lieu khi container restart.
 7. Tich hop voi web hoc lieu bang trang `web/ai-classroom.html`, nhung app Streamlit qua URL rieng.
+8. Mo rong flashcard trong `web/index.html` tu 120 the co ban len 1.240 the on sau, moi noi dung co 40-46 the.
+9. Thiet ke flashcard theo nguyen tac tu `Make It Stick`: truy hoi chu dong, on cach quang, tron kieu cau hoi, tu giai thich, tu tao cau tra loi va nhan phan hoi.
+10. Gan noi dung voi tinh huong CAND de hoc vien khong chi hoc thuoc khai niem ma biet dung nguyen ly vao phan tich, ren luyen va cong tac.
 
 ## Nguon tham khao
 
 - Streamlit caching: https://docs.streamlit.io/develop/concepts/architecture/caching
 - Streamlit configuration: https://docs.streamlit.io/develop/concepts/configuration/options
 - SQLite WAL: https://www.sqlite.org/wal.html
+- Make It Stick, Harvard University Press: https://www.hup.harvard.edu/books/9780674729018
+- Retrieval practice/testing effect: https://en.wikipedia.org/wiki/Testing_effect
+- Spaced repetition: https://en.wikipedia.org/wiki/Spaced_repetition
